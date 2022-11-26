@@ -284,6 +284,154 @@ export type CardinalStakePool = {
       ];
     },
     {
+      name: "unstake";
+      accounts: [
+        {
+          name: "stakePool";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "stakeEntry";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "originalMint";
+          isMut: false;
+          isSigner: false;
+        },
+        {
+          name: "stakeEntryOriginalMintTokenAccount";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "user";
+          isMut: true;
+          isSigner: true;
+        },
+        {
+          name: "userOriginalMintTokenAccount";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "tokenProgram";
+          isMut: false;
+          isSigner: false;
+        }
+      ];
+      args: [];
+    },
+    {
+      name: "ccsStake";
+      accounts: [
+        {
+          name: "stakeEntry";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "stakePool";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "mintManager";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "ruleset";
+          isMut: false;
+          isSigner: false;
+        },
+        {
+          name: "stakeEntryMintTokenAccount";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "mint";
+          isMut: false;
+          isSigner: false;
+        },
+        {
+          name: "user";
+          isMut: true;
+          isSigner: true;
+        },
+        {
+          name: "userMintTokenAccount";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "tokenProgram";
+          isMut: false;
+          isSigner: false;
+        },
+        {
+          name: "cardinalCreatorStandard";
+          isMut: false;
+          isSigner: false;
+        }
+      ];
+      args: [];
+    },
+    {
+      name: "ccsUnstake";
+      accounts: [
+        {
+          name: "stakePool";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "stakeEntry";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "mint";
+          isMut: false;
+          isSigner: false;
+        },
+        {
+          name: "mintManager";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "stakeEntryOriginalMintTokenAccount";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "user";
+          isMut: true;
+          isSigner: true;
+        },
+        {
+          name: "userMintTokenAccount";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "tokenProgram";
+          isMut: false;
+          isSigner: false;
+        },
+        {
+          name: "cardinalCreatorStandard";
+          isMut: false;
+          isSigner: false;
+        }
+      ];
+      args: [];
+    },
+    {
       name: "claimReceiptMint";
       accounts: [
         {
@@ -353,47 +501,6 @@ export type CardinalStakePool = {
         },
         {
           name: "rent";
-          isMut: false;
-          isSigner: false;
-        }
-      ];
-      args: [];
-    },
-    {
-      name: "unstake";
-      accounts: [
-        {
-          name: "stakePool";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "stakeEntry";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "originalMint";
-          isMut: false;
-          isSigner: false;
-        },
-        {
-          name: "stakeEntryOriginalMintTokenAccount";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "user";
-          isMut: true;
-          isSigner: true;
-        },
-        {
-          name: "userOriginalMintTokenAccount";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "tokenProgram";
           isMut: false;
           isSigner: false;
         }
@@ -1658,6 +1765,154 @@ export const IDL: CardinalStakePool = {
       ],
     },
     {
+      name: "unstake",
+      accounts: [
+        {
+          name: "stakePool",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "stakeEntry",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "originalMint",
+          isMut: false,
+          isSigner: false,
+        },
+        {
+          name: "stakeEntryOriginalMintTokenAccount",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "user",
+          isMut: true,
+          isSigner: true,
+        },
+        {
+          name: "userOriginalMintTokenAccount",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "tokenProgram",
+          isMut: false,
+          isSigner: false,
+        },
+      ],
+      args: [],
+    },
+    {
+      name: "ccsStake",
+      accounts: [
+        {
+          name: "stakeEntry",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "stakePool",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "mintManager",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "ruleset",
+          isMut: false,
+          isSigner: false,
+        },
+        {
+          name: "stakeEntryMintTokenAccount",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "mint",
+          isMut: false,
+          isSigner: false,
+        },
+        {
+          name: "user",
+          isMut: true,
+          isSigner: true,
+        },
+        {
+          name: "userMintTokenAccount",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "tokenProgram",
+          isMut: false,
+          isSigner: false,
+        },
+        {
+          name: "cardinalCreatorStandard",
+          isMut: false,
+          isSigner: false,
+        },
+      ],
+      args: [],
+    },
+    {
+      name: "ccsUnstake",
+      accounts: [
+        {
+          name: "stakePool",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "stakeEntry",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "mint",
+          isMut: false,
+          isSigner: false,
+        },
+        {
+          name: "mintManager",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "stakeEntryOriginalMintTokenAccount",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "user",
+          isMut: true,
+          isSigner: true,
+        },
+        {
+          name: "userMintTokenAccount",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "tokenProgram",
+          isMut: false,
+          isSigner: false,
+        },
+        {
+          name: "cardinalCreatorStandard",
+          isMut: false,
+          isSigner: false,
+        },
+      ],
+      args: [],
+    },
+    {
       name: "claimReceiptMint",
       accounts: [
         {
@@ -1727,47 +1982,6 @@ export const IDL: CardinalStakePool = {
         },
         {
           name: "rent",
-          isMut: false,
-          isSigner: false,
-        },
-      ],
-      args: [],
-    },
-    {
-      name: "unstake",
-      accounts: [
-        {
-          name: "stakePool",
-          isMut: true,
-          isSigner: false,
-        },
-        {
-          name: "stakeEntry",
-          isMut: true,
-          isSigner: false,
-        },
-        {
-          name: "originalMint",
-          isMut: false,
-          isSigner: false,
-        },
-        {
-          name: "stakeEntryOriginalMintTokenAccount",
-          isMut: true,
-          isSigner: false,
-        },
-        {
-          name: "user",
-          isMut: true,
-          isSigner: true,
-        },
-        {
-          name: "userOriginalMintTokenAccount",
-          isMut: true,
-          isSigner: false,
-        },
-        {
-          name: "tokenProgram",
           isMut: false,
           isSigner: false,
         },

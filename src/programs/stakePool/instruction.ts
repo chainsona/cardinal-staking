@@ -1,4 +1,5 @@
 import { findAta } from "@cardinal/common";
+import { PROGRAM_ADDRESS } from "@cardinal/creator-standard";
 import { PAYMENT_MANAGER_ADDRESS } from "@cardinal/payment-manager";
 import {
   CRANK_KEY,
@@ -361,6 +362,79 @@ export const unstake = (
       user: params.user,
       userOriginalMintTokenAccount: params.userOriginalMintTokenAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
+    },
+    remainingAccounts: params.remainingAccounts,
+  });
+};
+
+export const stakeCCS = (
+  connection: Connection,
+  wallet: Wallet,
+  params: {
+    mint: PublicKey;
+    mintManager: PublicKey;
+    ruleset: PublicKey;
+    stakeEntryId: PublicKey;
+    stakePoolId: PublicKey;
+    stakeEntryMintTokenAccountId: PublicKey;
+    userMintTokenAccountId: PublicKey;
+  }
+): TransactionInstruction => {
+  const provider = new AnchorProvider(connection, wallet, {});
+  const stakePoolProgram = new Program<STAKE_POOL_PROGRAM>(
+    STAKE_POOL_IDL,
+    STAKE_POOL_ADDRESS,
+    provider
+  );
+
+  return stakePoolProgram.instruction.ccsStake({
+    accounts: {
+      stakeEntry: params.stakeEntryId,
+      stakePool: params.stakePoolId,
+      mintManager: params.mintManager,
+      ruleset: params.ruleset,
+      stakeEntryMintTokenAccount: params.stakeEntryMintTokenAccountId,
+      mint: params.mint,
+      user: wallet.publicKey,
+      userMintTokenAccount: params.userMintTokenAccountId,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      cardinalCreatorStandard: PROGRAM_ADDRESS,
+    },
+  });
+};
+
+export const unstakeCCS = (
+  connection: Connection,
+  wallet: Wallet,
+  params: {
+    stakePoolId: PublicKey;
+    stakeEntryId: PublicKey;
+    mintId: PublicKey;
+    mintManagerId: PublicKey;
+    stakeEntryOriginalMintTokenAccount: PublicKey;
+    userMintTokenAccount: PublicKey;
+    user: PublicKey;
+    remainingAccounts: AccountMeta[];
+  }
+): TransactionInstruction => {
+  const provider = new AnchorProvider(connection, wallet, {});
+  const stakePoolProgram = new Program<STAKE_POOL_PROGRAM>(
+    STAKE_POOL_IDL,
+    STAKE_POOL_ADDRESS,
+    provider
+  );
+  return stakePoolProgram.instruction.ccsUnstake({
+    accounts: {
+      stakePool: params.stakePoolId,
+      stakeEntry: params.stakeEntryId,
+      mint: params.mintId,
+      mintManager: params.mintManagerId,
+      stakeEntryOriginalMintTokenAccount:
+        params.stakeEntryOriginalMintTokenAccount,
+      user: params.user,
+      userMintTokenAccount: params.userMintTokenAccount,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      cardinalCreatorStandard: PROGRAM_ADDRESS,
     },
     remainingAccounts: params.remainingAccounts,
   });

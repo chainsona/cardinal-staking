@@ -42,16 +42,26 @@ pub mod cardinal_stake_pool {
         deauthorize_mint::handler(ctx)
     }
 
+    // editions
     pub fn stake(ctx: Context<StakeCtx>, amount: u64) -> Result<()> {
         editions::stake::handler(ctx, amount)
     }
 
-    pub fn claim_receipt_mint<'key, 'accounts, 'remaining, 'info>(ctx: Context<'key, 'accounts, 'remaining, 'info, ClaimReceiptMintCtx<'info>>) -> Result<()> {
-        claim_receipt_mint::handler(ctx)
-    }
-
     pub fn unstake(ctx: Context<UnstakeCtx>) -> Result<()> {
         editions::unstake::handler(ctx)
+    }
+
+    // ccs
+    pub fn ccs_stake(ctx: Context<StakeCCSCtx>) -> Result<()> {
+        ccs::stake::handler(ctx)
+    }
+
+    pub fn ccs_unstake(ctx: Context<UnstakeCCSCtx>) -> Result<()> {
+        ccs::unstake::handler(ctx)
+    }
+
+    pub fn claim_receipt_mint<'key, 'accounts, 'remaining, 'info>(ctx: Context<'key, 'accounts, 'remaining, 'info, ClaimReceiptMintCtx<'info>>) -> Result<()> {
+        claim_receipt_mint::handler(ctx)
     }
 
     pub fn update_pool(ctx: Context<UpdatePoolCtx>, ix: UpdatePoolIx) -> Result<()> {

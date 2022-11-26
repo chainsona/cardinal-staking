@@ -43,7 +43,9 @@ import {
   reassignStakeEntry,
   returnReceiptMint,
   stake,
+  stakeCCS,
   unstake,
+  unstakeCCS,
   updateStakeBooster,
   updateStakePool,
   updateTotalStakeSeconds,
@@ -463,6 +465,169 @@ export const withUnstake = async (
       user: wallet.publicKey,
       stakeEntryOriginalMintTokenAccount: stakeEntryOriginalMintTokenAccountId,
       userOriginalMintTokenAccount: userOriginalMintTokenAccountId,
+      remainingAccounts,
+    })
+  );
+
+  // claim any rewards deserved
+  if (rewardDistributorData) {
+    await withClaimRewards(transaction, connection, wallet, {
+      stakePoolId: params.stakePoolId,
+      stakeEntryId: stakeEntryId,
+      lastStaker: wallet.publicKey,
+      skipRewardMintTokenAccount: params.skipRewardMintTokenAccount,
+    });
+  }
+
+  return transaction;
+};
+
+/**
+ * Add stake instructions to a transaction
+ * @param transaction
+ * @param connection
+ * @param wallet
+ * @param params
+ * @returns Transaction
+ */
+export const withStakeCCS = async (
+  transaction: web3.Transaction,
+  connection: web3.Connection,
+  wallet: Wallet,
+  params: {
+    stakePoolId: web3.PublicKey;
+    mintId: web3.PublicKey;
+    mintManagerId: web3.PublicKey;
+    rulesetId: web3.PublicKey;
+    userMintTokenAccountId: web3.PublicKey;
+    amount?: BN;
+  }
+): Promise<web3.Transaction> => {
+  const [stakeEntryId] = await findStakeEntryIdFromMint(
+    connection,
+    wallet.publicKey,
+    params.stakePoolId,
+    params.mintId
+  );
+  const stakeEntryMintTokenAccountId =
+    await withFindOrInitAssociatedTokenAccount(
+      transaction,
+      connection,
+      params.mintId,
+      stakeEntryId,
+      wallet.publicKey,
+      true
+    );
+
+  transaction.add(
+    stakeCCS(connection, wallet, {
+      mint: params.mintId,
+      mintManager: params.mintManagerId,
+      ruleset: params.rulesetId,
+      stakeEntryId: stakeEntryId,
+      stakePoolId: params.stakePoolId,
+      stakeEntryMintTokenAccountId: stakeEntryMintTokenAccountId,
+      userMintTokenAccountId: params.userMintTokenAccountId,
+    })
+  );
+
+  return transaction;
+};
+
+/**
+ * Add unstake instructions to a transaction
+ * @param transaction
+ * @param connection
+ * @param wallet
+ * @param params
+ * @returns Transaction
+ */
+export const withUnstakeCCS = async (
+  transaction: web3.Transaction,
+  connection: web3.Connection,
+  wallet: Wallet,
+  params: {
+    stakePoolId: web3.PublicKey;
+    mintId: web3.PublicKey;
+    mintManagerId: web3.PublicKey;
+    skipRewardMintTokenAccount?: boolean;
+  }
+): Promise<web3.Transaction> => {
+  const [[stakeEntryId], [rewardDistributorId]] = await Promise.all([
+    findStakeEntryIdFromMint(
+      connection,
+      wallet.publicKey,
+      params.stakePoolId,
+      params.mintId
+    ),
+    await findRewardDistributorId(params.stakePoolId),
+  ]);
+
+  const [stakeEntryData, rewardDistributorData] = await Promise.all([
+    tryGetAccount(() => getStakeEntry(connection, stakeEntryId)),
+    tryGetAccount(() => getRewardDistributor(connection, rewardDistributorId)),
+  ]);
+
+  if (!stakeEntryData) throw "Stake entry not found";
+
+  const stakePoolData = await getStakePool(connection, params.stakePoolId);
+
+  if (
+    (!stakePoolData.parsed.cooldownSeconds ||
+      stakePoolData.parsed.cooldownSeconds === 0 ||
+      (stakeEntryData?.parsed.cooldownStartSeconds &&
+        Date.now() / 1000 -
+          stakeEntryData.parsed.cooldownStartSeconds.toNumber() >=
+          stakePoolData.parsed.cooldownSeconds)) &&
+    (!stakePoolData.parsed.minStakeSeconds ||
+      stakePoolData.parsed.minStakeSeconds === 0 ||
+      (stakeEntryData?.parsed.lastStakedAt &&
+        Date.now() / 1000 - stakeEntryData.parsed.lastStakedAt.toNumber() >=
+          stakePoolData.parsed.minStakeSeconds)) &&
+    (stakeEntryData.parsed.originalMintClaimed ||
+      stakeEntryData.parsed.stakeMintClaimed)
+  ) {
+    // return receipt mint if its claimed
+    await withReturnReceiptMint(transaction, connection, wallet, {
+      stakeEntryId: stakeEntryId,
+    });
+  }
+
+  const stakeEntryMintTokenAccountId =
+    await withFindOrInitAssociatedTokenAccount(
+      transaction,
+      connection,
+      params.mintId,
+      stakeEntryId,
+      wallet.publicKey,
+      true
+    );
+
+  const userMintTokenAccount = await withFindOrInitAssociatedTokenAccount(
+    transaction,
+    connection,
+    params.mintId,
+    wallet.publicKey,
+    wallet.publicKey
+  );
+
+  const remainingAccounts = await withRemainingAccountsForUnstake(
+    transaction,
+    connection,
+    wallet,
+    stakeEntryId,
+    stakeEntryData?.parsed.stakeMint
+  );
+
+  transaction.add(
+    unstakeCCS(connection, wallet, {
+      stakePoolId: params.stakePoolId,
+      stakeEntryId: stakeEntryId,
+      mintId: params.mintId,
+      mintManagerId: params.mintManagerId,
+      user: wallet.publicKey,
+      stakeEntryOriginalMintTokenAccount: stakeEntryMintTokenAccountId,
+      userMintTokenAccount: userMintTokenAccount,
       remainingAccounts,
     })
   );

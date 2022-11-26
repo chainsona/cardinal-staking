@@ -1,8 +1,9 @@
 import { tryGetAccount } from "@cardinal/common";
+import { findMintManagerId, MintManager } from "@cardinal/creator-standard";
 import { BN } from "@project-serum/anchor";
 import type { Wallet } from "@saberhq/solana-contrib";
-import type { Connection, PublicKey } from "@solana/web3.js";
-import { Keypair, Transaction } from "@solana/web3.js";
+import type { Connection } from "@solana/web3.js";
+import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
 
 import type { RewardDistributorKind } from "./programs/rewardDistributor";
 import { findRewardDistributorId } from "./programs/rewardDistributor/pda";
@@ -21,7 +22,9 @@ import {
   withInitStakeMint,
   withInitStakePool,
   withStake,
+  withStakeCCS,
   withUnstake,
+  withUnstakeCCS,
   withUpdateTotalStakeSeconds,
 } from "./programs/stakePool/transaction";
 import { findStakeEntryIdFromMint } from "./programs/stakePool/utils";
@@ -360,12 +363,30 @@ export const stake = async (
     });
   }
 
-  await withStake(transaction, connection, wallet, {
-    stakePoolId: params.stakePoolId,
-    originalMintId: params.originalMintId,
-    userOriginalMintTokenAccountId: params.userOriginalMintTokenAccountId,
-    amount: params.amount,
-  });
+  const mintManagerId = findMintManagerId(params.originalMintId);
+  let rulesetId = new PublicKey("");
+  try {
+    const mintManagerData = await MintManager.fromAccountAddress(
+      connection,
+      params.originalMintId
+    );
+    rulesetId = mintManagerData.ruleset;
+    await withStakeCCS(transaction, connection, wallet, {
+      stakePoolId: params.stakePoolId,
+      mintId: params.originalMintId,
+      mintManagerId: mintManagerId,
+      rulesetId: rulesetId,
+      userMintTokenAccountId: params.userOriginalMintTokenAccountId,
+      amount: params.amount,
+    });
+  } catch (e) {
+    await withStake(transaction, connection, wallet, {
+      stakePoolId: params.stakePoolId,
+      originalMintId: params.originalMintId,
+      userOriginalMintTokenAccountId: params.userOriginalMintTokenAccountId,
+      amount: params.amount,
+    });
+  }
 
   if (params.receiptType && params.receiptType !== ReceiptType.None) {
     const receiptMintId =
@@ -417,5 +438,21 @@ export const unstake = async (
     originalMintId: PublicKey;
     skipRewardMintTokenAccount?: boolean;
   }
-): Promise<Transaction> =>
-  withUnstake(new Transaction(), connection, wallet, params);
+): Promise<Transaction> => {
+  const transaction = new Transaction();
+
+  const mintManagerId = findMintManagerId(params.originalMintId);
+  try {
+    await MintManager.fromAccountAddress(connection, params.originalMintId);
+    await withUnstakeCCS(transaction, connection, wallet, {
+      stakePoolId: params.stakePoolId,
+      mintId: params.originalMintId,
+      mintManagerId: mintManagerId,
+      skipRewardMintTokenAccount: params.skipRewardMintTokenAccount,
+    });
+  } catch (e) {
+    await withUnstake(transaction, connection, wallet, params);
+  }
+
+  return transaction;
+};

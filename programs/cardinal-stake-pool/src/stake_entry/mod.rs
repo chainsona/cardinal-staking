@@ -14,3 +14,8 @@ pub use update_total_stake_seconds::*;
 pub mod editions;
 pub use editions::stake::*;
 pub use editions::unstake::*;
+
+// ccs
+pub mod ccs;
+pub use ccs::stake::*;
+pub use ccs::unstake::*;
