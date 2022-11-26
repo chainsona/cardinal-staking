@@ -90,4 +90,13 @@ pub mod cardinal_stake_pool {
     pub fn close_stake_booster(ctx: Context<CloseStakeBoosterCtx>) -> Result<()> {
         stake_booster::close_stake_booster::handler(ctx)
     }
+
+    //// permissioned ////
+    pub fn permissioned_stake(ctx: Context<PermissionedStakeCtx>) -> Result<()> {
+        permissioned::permissioned_stake::handler(ctx)
+    }
+
+    pub fn permissioned_unstake(ctx: Context<PermissionedUnstakeCtx>) -> Result<()> {
+        permissioned::permissioned_unstake::handler(ctx)
+    }
 }

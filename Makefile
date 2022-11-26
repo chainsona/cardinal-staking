@@ -16,6 +16,7 @@ start:
 		--clone metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s --clone PwDiXFxQsGra4sFFTT8r1QWRMd4vfumiWC1jfWNfdYT \
 		--clone mgr99QFMYByTqGPWmNqunV7vBLmWWXdSrHUfV8Jf3JM --clone ojLGErfqghuAqpJXE1dguXF7kKfvketCEeah8ig6GU3 \
 		--clone pmvYY6Wgvpe3DEj3UX1FcRpMx43sMLYLJrFTVGcqpdn --clone 355AtuHH98Jy9XFg5kWodfmvSfrhcxYUKGoJe8qziFNY \
+		--clone trsMRg3GzFSNgC3tdhbuKUES8YvGtUBbzp5fjxLtVQW --clone 6maVZBzthBki388ioma2fjWFQUi1sVyiaaFcZiofP3VP \
 		--bpf-program stkBL96RZkjY5ine4TvPihGqW8UHJfch2cokjAPzV8i ./target/deploy/cardinal_stake_pool.so \
 		--bpf-program rwdNPNPS6zNvtF6FMvaxPRjzu2eC51mXaDT9rmWsojp ./target/deploy/cardinal_reward_distributor.so \
 		--bpf-program rrmevmpXMooxn8Qu6u7RWao93BZn4cKgfjtNMURSc2E ./target/deploy/cardinal_receipt_manager.so \

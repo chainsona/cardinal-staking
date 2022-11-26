@@ -38,3 +38,8 @@ pub use stake_booster::boost_stake_entry::*;
 pub use stake_booster::close_stake_booster::*;
 pub use stake_booster::init_stake_booster::*;
 pub use stake_booster::update_stake_booster::*;
+
+// permissioned
+pub mod permissioned;
+pub use permissioned::permissioned_stake::*;
+pub use permissioned::permissioned_unstake::*;

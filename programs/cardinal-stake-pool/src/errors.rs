@@ -71,4 +71,7 @@ pub enum ErrorCode {
     InvalidPaymentManager,
     #[msg("Cannot boost a fungible token stake entry")]
     CannotBoostFungibleToken,
+    // permissioned errors
+    #[msg("Invalid token manager")]
+    InvalidTokenManager,
 }
