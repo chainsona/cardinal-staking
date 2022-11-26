@@ -1,8 +1,16 @@
+pub mod receipt_mint;
+pub use receipt_mint::*;
+pub mod stake_booster;
+pub use stake_booster::*;
+pub mod stake_entry;
+pub use stake_entry::*;
+pub mod stake_pool;
+pub use stake_pool::*;
+
 pub mod errors;
-pub mod instructions;
 pub mod state;
 
-use {anchor_lang::prelude::*, instructions::*};
+use anchor_lang::prelude::*;
 
 declare_id!("stkBL96RZkjY5ine4TvPihGqW8UHJfch2cokjAPzV8i");
 
@@ -35,7 +43,7 @@ pub mod cardinal_stake_pool {
     }
 
     pub fn stake(ctx: Context<StakeCtx>, amount: u64) -> Result<()> {
-        stake::handler(ctx, amount)
+        editions::stake::handler(ctx, amount)
     }
 
     pub fn claim_receipt_mint<'key, 'accounts, 'remaining, 'info>(ctx: Context<'key, 'accounts, 'remaining, 'info, ClaimReceiptMintCtx<'info>>) -> Result<()> {
@@ -43,7 +51,7 @@ pub mod cardinal_stake_pool {
     }
 
     pub fn unstake(ctx: Context<UnstakeCtx>) -> Result<()> {
-        unstake::handler(ctx)
+        editions::unstake::handler(ctx)
     }
 
     pub fn update_pool(ctx: Context<UpdatePoolCtx>, ix: UpdatePoolIx) -> Result<()> {

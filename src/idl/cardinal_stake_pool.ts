@@ -957,64 +957,6 @@ export type CardinalStakePool = {
   ];
   types: [
     {
-      name: "InitPoolIx";
-      type: {
-        kind: "struct";
-        fields: [
-          {
-            name: "overlayText";
-            type: "string";
-          },
-          {
-            name: "imageUri";
-            type: "string";
-          },
-          {
-            name: "requiresCollections";
-            type: {
-              vec: "publicKey";
-            };
-          },
-          {
-            name: "requiresCreators";
-            type: {
-              vec: "publicKey";
-            };
-          },
-          {
-            name: "requiresAuthorization";
-            type: "bool";
-          },
-          {
-            name: "authority";
-            type: "publicKey";
-          },
-          {
-            name: "resetOnStake";
-            type: "bool";
-          },
-          {
-            name: "cooldownSeconds";
-            type: {
-              option: "u32";
-            };
-          },
-          {
-            name: "minStakeSeconds";
-            type: {
-              option: "u32";
-            };
-          },
-          {
-            name: "endDate";
-            type: {
-              option: "i64";
-            };
-          }
-        ];
-      };
-    },
-    {
       name: "InitStakeMintIx";
       type: {
         kind: "struct";
@@ -1026,18 +968,6 @@ export type CardinalStakePool = {
           {
             name: "symbol";
             type: "string";
-          }
-        ];
-      };
-    },
-    {
-      name: "ReassignStakeEntryIx";
-      type: {
-        kind: "struct";
-        fields: [
-          {
-            name: "target";
-            type: "publicKey";
           }
         ];
       };
@@ -1114,6 +1044,76 @@ export type CardinalStakePool = {
           {
             name: "startTimeSeconds";
             type: "i64";
+          }
+        ];
+      };
+    },
+    {
+      name: "ReassignStakeEntryIx";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "target";
+            type: "publicKey";
+          }
+        ];
+      };
+    },
+    {
+      name: "InitPoolIx";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "overlayText";
+            type: "string";
+          },
+          {
+            name: "imageUri";
+            type: "string";
+          },
+          {
+            name: "requiresCollections";
+            type: {
+              vec: "publicKey";
+            };
+          },
+          {
+            name: "requiresCreators";
+            type: {
+              vec: "publicKey";
+            };
+          },
+          {
+            name: "requiresAuthorization";
+            type: "bool";
+          },
+          {
+            name: "authority";
+            type: "publicKey";
+          },
+          {
+            name: "resetOnStake";
+            type: "bool";
+          },
+          {
+            name: "cooldownSeconds";
+            type: {
+              option: "u32";
+            };
+          },
+          {
+            name: "minStakeSeconds";
+            type: {
+              option: "u32";
+            };
+          },
+          {
+            name: "endDate";
+            type: {
+              option: "i64";
+            };
           }
         ];
       };
@@ -2331,64 +2331,6 @@ export const IDL: CardinalStakePool = {
   ],
   types: [
     {
-      name: "InitPoolIx",
-      type: {
-        kind: "struct",
-        fields: [
-          {
-            name: "overlayText",
-            type: "string",
-          },
-          {
-            name: "imageUri",
-            type: "string",
-          },
-          {
-            name: "requiresCollections",
-            type: {
-              vec: "publicKey",
-            },
-          },
-          {
-            name: "requiresCreators",
-            type: {
-              vec: "publicKey",
-            },
-          },
-          {
-            name: "requiresAuthorization",
-            type: "bool",
-          },
-          {
-            name: "authority",
-            type: "publicKey",
-          },
-          {
-            name: "resetOnStake",
-            type: "bool",
-          },
-          {
-            name: "cooldownSeconds",
-            type: {
-              option: "u32",
-            },
-          },
-          {
-            name: "minStakeSeconds",
-            type: {
-              option: "u32",
-            },
-          },
-          {
-            name: "endDate",
-            type: {
-              option: "i64",
-            },
-          },
-        ],
-      },
-    },
-    {
       name: "InitStakeMintIx",
       type: {
         kind: "struct",
@@ -2400,18 +2342,6 @@ export const IDL: CardinalStakePool = {
           {
             name: "symbol",
             type: "string",
-          },
-        ],
-      },
-    },
-    {
-      name: "ReassignStakeEntryIx",
-      type: {
-        kind: "struct",
-        fields: [
-          {
-            name: "target",
-            type: "publicKey",
           },
         ],
       },
@@ -2488,6 +2418,76 @@ export const IDL: CardinalStakePool = {
           {
             name: "startTimeSeconds",
             type: "i64",
+          },
+        ],
+      },
+    },
+    {
+      name: "ReassignStakeEntryIx",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "target",
+            type: "publicKey",
+          },
+        ],
+      },
+    },
+    {
+      name: "InitPoolIx",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "overlayText",
+            type: "string",
+          },
+          {
+            name: "imageUri",
+            type: "string",
+          },
+          {
+            name: "requiresCollections",
+            type: {
+              vec: "publicKey",
+            },
+          },
+          {
+            name: "requiresCreators",
+            type: {
+              vec: "publicKey",
+            },
+          },
+          {
+            name: "requiresAuthorization",
+            type: "bool",
+          },
+          {
+            name: "authority",
+            type: "publicKey",
+          },
+          {
+            name: "resetOnStake",
+            type: "bool",
+          },
+          {
+            name: "cooldownSeconds",
+            type: {
+              option: "u32",
+            },
+          },
+          {
+            name: "minStakeSeconds",
+            type: {
+              option: "u32",
+            },
+          },
+          {
+            name: "endDate",
+            type: {
+              option: "i64",
+            },
           },
         ],
       },
