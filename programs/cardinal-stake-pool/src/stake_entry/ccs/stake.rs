@@ -81,6 +81,7 @@ pub fn handler(ctx: Context<StakeCCSCtx>) -> Result<()> {
             ctx.accounts.ruleset.to_account_info(),
             ctx.accounts.user.to_account_info(),
             ctx.accounts.user_mint_token_account.to_account_info(),
+            stake_entry.to_account_info(),
         ],
     )?;
 

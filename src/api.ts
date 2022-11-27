@@ -2,8 +2,8 @@ import { tryGetAccount } from "@cardinal/common";
 import { findMintManagerId, MintManager } from "@cardinal/creator-standard";
 import { BN } from "@project-serum/anchor";
 import type { Wallet } from "@saberhq/solana-contrib";
-import type { Connection } from "@solana/web3.js";
-import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import type { Connection, PublicKey } from "@solana/web3.js";
+import { Keypair, Transaction } from "@solana/web3.js";
 
 import type { RewardDistributorKind } from "./programs/rewardDistributor";
 import { findRewardDistributorId } from "./programs/rewardDistributor/pda";
@@ -364,13 +364,14 @@ export const stake = async (
   }
 
   const mintManagerId = findMintManagerId(params.originalMintId);
-  let rulesetId = new PublicKey("");
+  let isCCSToken = false;
   try {
     const mintManagerData = await MintManager.fromAccountAddress(
       connection,
-      params.originalMintId
+      mintManagerId
     );
-    rulesetId = mintManagerData.ruleset;
+    isCCSToken = true;
+    const rulesetId = mintManagerData.ruleset;
     await withStakeCCS(transaction, connection, wallet, {
       stakePoolId: params.stakePoolId,
       mintId: params.originalMintId,
@@ -388,34 +389,36 @@ export const stake = async (
     });
   }
 
-  if (params.receiptType && params.receiptType !== ReceiptType.None) {
-    const receiptMintId =
-      params.receiptType === ReceiptType.Receipt
-        ? stakeEntryData?.parsed.stakeMint
-        : params.originalMintId;
-    if (!receiptMintId) {
-      throw new Error(
-        "Stake entry has no stake mint. Initialize stake mint first."
-      );
-    }
-    if (
-      stakeEntryData?.parsed.stakeMintClaimed ||
-      stakeEntryData?.parsed.originalMintClaimed
-    ) {
-      throw new Error("Receipt has already been claimed.");
-    }
+  if (!isCCSToken) {
+    if (params.receiptType && params.receiptType !== ReceiptType.None) {
+      const receiptMintId =
+        params.receiptType === ReceiptType.Receipt
+          ? stakeEntryData?.parsed.stakeMint
+          : params.originalMintId;
+      if (!receiptMintId) {
+        throw new Error(
+          "Stake entry has no stake mint. Initialize stake mint first."
+        );
+      }
+      if (
+        stakeEntryData?.parsed.stakeMintClaimed ||
+        stakeEntryData?.parsed.originalMintClaimed
+      ) {
+        throw new Error("Receipt has already been claimed.");
+      }
 
-    if (
-      !stakeEntryData?.parsed ||
-      stakeEntryData.parsed.amount.toNumber() === 0
-    ) {
-      await withClaimReceiptMint(transaction, connection, wallet, {
-        stakePoolId: params.stakePoolId,
-        stakeEntryId: stakeEntryId,
-        originalMintId: params.originalMintId,
-        receiptMintId: receiptMintId,
-        receiptType: params.receiptType,
-      });
+      if (
+        !stakeEntryData?.parsed ||
+        stakeEntryData.parsed.amount.toNumber() === 0
+      ) {
+        await withClaimReceiptMint(transaction, connection, wallet, {
+          stakePoolId: params.stakePoolId,
+          stakeEntryId: stakeEntryId,
+          originalMintId: params.originalMintId,
+          receiptMintId: receiptMintId,
+          receiptType: params.receiptType,
+        });
+      }
     }
   }
 
@@ -443,7 +446,7 @@ export const unstake = async (
 
   const mintManagerId = findMintManagerId(params.originalMintId);
   try {
-    await MintManager.fromAccountAddress(connection, params.originalMintId);
+    await MintManager.fromAccountAddress(connection, mintManagerId);
     await withUnstakeCCS(transaction, connection, wallet, {
       stakePoolId: params.stakePoolId,
       mintId: params.originalMintId,

@@ -21,7 +21,7 @@ pub struct UnstakeCCSCtx<'info> {
 
     // stake_entry token accounts
     #[account(mut, constraint =
-        (stake_entry_original_mint_token_account.amount > 0 || stake_pool.cooldown_seconds.is_some() || stake_pool.min_stake_seconds.is_some())
+        (stake_entry_original_mint_token_account.amount == 0 || stake_pool.cooldown_seconds.is_some() || stake_pool.min_stake_seconds.is_some())
         && stake_entry_original_mint_token_account.mint == stake_entry.original_mint
         && stake_entry_original_mint_token_account.owner == stake_entry.key()
         @ ErrorCode::InvalidStakeEntryOriginalMintTokenAccount)]
