@@ -118,7 +118,10 @@
 </ul>
 </li>
 </ul>
-<p><strong>Stake Entry</strong></p>
+
+<a href="#stake-entry" id="stake-entry" style="color: inherit; text-decoration: none;">
+  <h2>Stake Entry</h2>
+</a>
 <p>Stake pools are a collection of stake entries. Each stake entry stores information related to a specific NFT and how long it has been staked.</p>
 <p>Every time a new NFT is staked, a stake entry must first be created. This can happen in a single transaction by combining the <code>init_entry</code> with <code>stake</code> instructions. If a receipt mint is created, the current client will do this in two transactions due to compute limitations.</p>
 <p>Stake entries also retain ownership of the given mint(s) while it is staked.</p>
@@ -126,7 +129,10 @@
 <p>Either or both of these mints must be returned to the <code>stake_entry</code> before the user can unstake. This will be done automatically when calling the <code>unstake</code> API.</p>
 <pre><code><span class="hl-0">#[</span><span class="hl-1">account</span><span class="hl-0">]</span><br/><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-1">struct</span><span class="hl-0"> </span><span class="hl-1">StakeEntry</span><span class="hl-0"> {</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">bump</span><span class="hl-0">: </span><span class="hl-1">u8</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">pool</span><span class="hl-0">: </span><span class="hl-1">Pubkey</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">amount</span><span class="hl-0">: </span><span class="hl-1">u64</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">original_mint</span><span class="hl-0">: </span><span class="hl-1">Pubkey</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">original_mint_claimed</span><span class="hl-0">: </span><span class="hl-1">bool</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">last_staker</span><span class="hl-0">: </span><span class="hl-1">Pubkey</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">last_staked_at</span><span class="hl-0">: </span><span class="hl-1">i64</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">total_stake_seconds</span><span class="hl-0">: </span><span class="hl-1">i128</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">stake_mint_claimed</span><span class="hl-0">: </span><span class="hl-1">bool</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">kind</span><span class="hl-0">: </span><span class="hl-1">u8</span><span class="hl-0">,</span><br/><span class="hl-0">    </span><span class="hl-1">pub</span><span class="hl-0"> </span><span class="hl-2">stake_mint</span><span class="hl-0">: </span><span class="hl-1">Option</span><span class="hl-0">&lt;</span><span class="hl-1">Pubkey</span><span class="hl-0">&gt;,</span><br/><span class="hl-0">}</span>
 </code></pre>
-<p><strong>Stake Receipts</strong></p>
+
+<a href="#stake-receipts" id="stake-receipts" style="color: inherit; text-decoration: none;">
+  <h2>Stake Receipts</h2>
+</a>
 <p>Stake pool is designed to support general staking as well as a enable the concept of stake receipts.</p>
 <blockquote>
 <p>Receipts is a feature that allows the user to have a representation of the staked NFT in their wallet</p>
@@ -150,7 +156,10 @@
 </ul>
 </li>
 </ul>
-<p><strong>Reward Distributors</strong></p>
+
+<a href="#reward-distributors" id="reward-distributors" style="color: inherit; text-decoration: none;">
+  <h2>Reward Distributors</h2>
+</a>
 <p>While just using the <code>stake_pool</code> can be sufficient to keep track of total stake duration and lock the NFT in the user&#39;s wallet, a reward distributor can be optionally added to distribute rewards to staked NFTs.</p>
 <p>Reward distributor is modeled similar to a stake pool, having both a <code>reward_distributor</code> and a <code>reward_entry</code>. The reward entry is unique for each mint and keeps track how many reward have been given out to that NFT to ensure that it gets its fair share.</p>
 <p>As mentioned above, reward distibutor is a basic example of a fixed linear payout structure, but modeling this as a separate program allows for arbitrary pluggable reward logic for reward distribution.</p>
@@ -175,7 +184,10 @@
 </ul>
 <p>In both kinds of reward distributors, if the <code>max_supply</code> is hit, or the treasury runs out, the remaining rewards will be given out and the <code>reward_seconds_received</code> will be partially updated.</p>
 <p>Because reward distributor is modeled separately from the stake_pool, a user can optionally claim their rewards at any time for the amount of time they have staked. Typically, this is done automatically when calling <code>unstake</code> by the client.</p>
-<p><strong>Reward Distributor Multipliers</strong></p>
+
+<a href="#reward-distributor-multipliers" id="reward-distributor-multipliers" style="color: inherit; text-decoration: none;">
+  <h2>Reward Distributor Multipliers</h2>
+</a>
 <p>Multipliers is a feature that can set a given token (via its reward_entry) to receive more rewards than the others. A reward distributor has two fields one for the <code>default_multiplier</code>, defaults to <code>1</code>, and another for the <code>multiplier_decimals</code>, defaults to <code>0</code>. Every time a reward entry is initialized, its multiplier gets set to the <code>default_multiplier</code> of its reward distributor. Only the authority of the pool can change the multiplier by calling <code>update_reward_entry</code> instruction. In the calculation of the claimable rewards for an entry, the <code>multiplier</code> is divided by ten to the power of the distributor&#39;s <code>multiplier_decimals</code>, achieving the outcome of decimal multipliers.</p>
 <ul>
 <li>Modeling this separately allows for either 1) the user to initialize their own reward_entries and the authority to update their multiplier later on or 2) the authority to run arbitrary events / bonuses for specific NFTs at any time.</li>
