@@ -1,24 +1,36 @@
 import {
   findAta,
   findMintMetadataId,
+  METADATA_PROGRAM_ID,
   tryGetAccount,
   withFindOrInitAssociatedTokenAccount,
 } from "@cardinal/common";
+import { CRANK_KEY, PAYMENT_MANAGER_ADDRESS } from "@cardinal/payment-manager";
 import { getPaymentManager } from "@cardinal/payment-manager/dist/cjs/accounts";
 import { tokenManager } from "@cardinal/token-manager/dist/cjs/programs";
-import { withRemainingAccountsForReturn } from "@cardinal/token-manager/dist/cjs/programs/tokenManager";
 import {
+  getRemainingAccountsForKind,
+  TOKEN_MANAGER_ADDRESS,
+  TokenManagerKind,
+  TokenManagerState,
+  withRemainingAccountsForReturn,
+} from "@cardinal/token-manager/dist/cjs/programs/tokenManager";
+import {
+  findMintCounterId,
   findMintManagerId,
   findTokenManagerAddress,
   tokenManagerAddressFromMint,
 } from "@cardinal/token-manager/dist/cjs/programs/tokenManager/pda";
 import { BN } from "@project-serum/anchor";
 import type { Wallet } from "@project-serum/anchor/dist/cjs/provider";
-import type {
-  Connection,
+import { ASSOCIATED_PROGRAM_ID } from "@project-serum/anchor/dist/cjs/utils/token";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import type { Connection, PublicKey, Transaction } from "@solana/web3.js";
+import {
   Keypair,
-  PublicKey,
-  Transaction,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+  SYSVAR_SLOT_HASHES_PUBKEY,
 } from "@solana/web3.js";
 
 import { getMintSupply } from "../../utils";
@@ -31,34 +43,18 @@ import {
   getStakeEntry,
   getStakePool,
 } from "./accounts";
-import { ReceiptType } from "./constants";
 import {
-  addToGroupEntry,
-  authorizeStakeEntry,
-  boostStakeEntry,
-  claimReceiptMint,
-  closeGroupEntry,
-  closeStakeBooster,
-  closeStakeEntry,
-  closeStakePool,
-  deauthorizeStakeEntry,
-  doubleOrResetTotalStakeSeconds,
-  initGroupStakeEntry,
-  initPoolIdentifier,
-  initStakeBooster,
-  initStakeEntry,
-  initStakeMint,
-  initStakePool,
-  reassignStakeEntry,
-  removeFromGroupEntry,
-  returnReceiptMint,
-  stake,
-  unstake,
-  updateStakeBooster,
-  updateStakePool,
-  updateTotalStakeSeconds,
-} from "./instruction";
-import { findIdentifierId, findStakeBoosterId, findStakePoolId } from "./pda";
+  ReceiptType,
+  STAKE_BOOSTER_PAYMENT_MANAGER,
+  stakePoolProgram,
+} from "./constants";
+import {
+  findGroupEntryId,
+  findIdentifierId,
+  findStakeAuthorizationId,
+  findStakeBoosterId,
+  findStakePoolId,
+} from "./pda";
 import {
   findStakeEntryIdFromMint,
   withRemainingAccountsForUnstake,
@@ -71,17 +67,22 @@ import {
  * @param wallet
  * @returns Transaction, public key for the created pool identifier
  */
-export const withInitPoolIdentifier = (
+export const withInitPoolIdentifier = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet
-): [Transaction, PublicKey] => {
+): Promise<[Transaction, PublicKey]> => {
   const identifierId = findIdentifierId();
-  transaction.add(
-    initPoolIdentifier(connection, wallet, {
-      identifierId,
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .initIdentifier()
+    .accounts({
+      identifier: identifierId,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return [transaction, identifierId];
 };
 
@@ -108,32 +109,42 @@ export const withInitStakePool = async (
   );
   const identifier = identifierData?.parsed.count || new BN(1);
 
+  const program = stakePoolProgram(connection, wallet);
   if (!identifierData) {
-    transaction.add(
-      initPoolIdentifier(connection, wallet, {
-        identifierId: identifierId,
+    const ix = await program.methods
+      .initIdentifier()
+      .accounts({
+        identifier: identifierId,
+        payer: wallet.publicKey,
+        systemProgram: SystemProgram.programId,
       })
-    );
+      .instruction();
+    transaction.add(ix);
   }
 
   const stakePoolId = findStakePoolId(identifier);
-  transaction.add(
-    initStakePool(connection, wallet, {
-      identifierId: identifierId,
-      stakePoolId: stakePoolId,
-      requiresCreators: params.requiresCreators || [],
-      requiresCollections: params.requiresCollections || [],
-      requiresAuthorization: params.requiresAuthorization,
-      overlayText: params.overlayText || "",
+  const ix = await program.methods
+    .initPool({
+      overlayText: params.overlayText || "STAKED",
       imageUri: params.imageUri || "",
+      requiresCollections: params.requiresCollections || [],
+      requiresCreators: params.requiresCreators || [],
+      requiresAuthorization: params.requiresAuthorization || false,
       authority: wallet.publicKey,
       resetOnStake: params.resetOnStake || false,
-      cooldownSeconds: params.cooldownSeconds,
-      minStakeSeconds: params.minStakeSeconds,
-      endDate: params.endDate,
-      doubleOrResetEnabled: params.doubleOrResetEnabled,
+      cooldownSeconds: params.cooldownSeconds || null,
+      minStakeSeconds: params.minStakeSeconds || null,
+      endDate: params.endDate || null,
+      doubleOrResetEnabled: params.doubleOrResetEnabled || null,
     })
-  );
+    .accounts({
+      stakePool: stakePoolId,
+      identifier: identifierId,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  transaction.add(ix);
   return [transaction, stakePoolId];
 };
 
@@ -162,14 +173,19 @@ export const withInitStakeEntry = async (
   );
   const originalMintMetadatId = findMintMetadataId(params.originalMintId);
 
-  transaction.add(
-    initStakeEntry(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      stakeEntryId: stakeEntryId,
-      originalMintId: params.originalMintId,
-      originalMintMetadatId: originalMintMetadatId,
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .initEntry(wallet.publicKey)
+    .accounts({
+      stakeEntry: stakeEntryId,
+      stakePool: params.stakePoolId,
+      originalMint: params.originalMintId,
+      originalMintMetadata: originalMintMetadatId,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return [transaction, stakeEntryId];
 };
 
@@ -181,7 +197,7 @@ export const withInitStakeEntry = async (
  * @param params
  * @returns Transaction
  */
-export const withAuthorizeStakeEntry = (
+export const withAuthorizeStakeEntry = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -189,13 +205,23 @@ export const withAuthorizeStakeEntry = (
     stakePoolId: PublicKey;
     originalMintId: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    authorizeStakeEntry(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      originalMintId: params.originalMintId,
-    })
+): Promise<Transaction> => {
+  const stakeAuthorizationId = findStakeAuthorizationId(
+    params.stakePoolId,
+    params.originalMintId
   );
+
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .authorizeMint(params.originalMintId)
+    .accounts({
+      stakePool: params.stakePoolId,
+      stakeAuthorizationRecord: stakeAuthorizationId,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
@@ -207,7 +233,7 @@ export const withAuthorizeStakeEntry = (
  * @param params
  * @returns Transaction
  */
-export const withDeauthorizeStakeEntry = (
+export const withDeauthorizeStakeEntry = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -215,13 +241,22 @@ export const withDeauthorizeStakeEntry = (
     stakePoolId: PublicKey;
     originalMintId: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    deauthorizeStakeEntry(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      originalMintId: params.originalMintId,
-    })
+): Promise<Transaction> => {
+  const stakeAuthorizationId = findStakeAuthorizationId(
+    params.stakePoolId,
+    params.originalMintId
   );
+
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .deauthorizeMint()
+    .accounts({
+      stakePool: params.stakePoolId,
+      stakeAuthorizationRecord: stakeAuthorizationId,
+      authority: wallet.publicKey,
+    })
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
@@ -259,20 +294,31 @@ export const withInitStakeMint = async (
     true
   );
 
-  transaction.add(
-    initStakeMint(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      stakeEntryId: params.stakeEntryId,
-      originalMintId: params.originalMintId,
-      originalMintMetadatId: originalMintMetadataId,
-      stakeEntryStakeMintTokenAccountId: stakeEntryStakeMintTokenAccountId,
-      stakeMintId: params.stakeMintKeypair.publicKey,
-      stakeMintMetadataId: stakeMintMetadataId,
-      mintManagerId: mintManagerId,
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .initStakeMint({
       name: params.name,
       symbol: params.symbol,
     })
-  );
+    .accounts({
+      stakeEntry: params.stakeEntryId,
+      stakePool: params.stakePoolId,
+      originalMint: params.originalMintId,
+      originalMintMetadata: originalMintMetadataId,
+      stakeMint: params.stakeMintKeypair.publicKey,
+      stakeMintMetadata: stakeMintMetadataId,
+      stakeEntryStakeMintTokenAccount: stakeEntryStakeMintTokenAccountId,
+      mintManager: mintManagerId,
+      payer: wallet.publicKey,
+      rent: SYSVAR_RENT_PUBKEY,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenManagerProgram: TOKEN_MANAGER_ADDRESS,
+      associatedToken: ASSOCIATED_PROGRAM_ID,
+      tokenMetadataProgram: METADATA_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  transaction.add(ix);
   return [transaction, params.stakeMintKeypair];
 };
 
@@ -317,16 +363,48 @@ export const withClaimReceiptMint = async (
       true
     );
 
-  transaction.add(
-    await claimReceiptMint(connection, wallet, {
-      stakeEntryId: params.stakeEntryId,
-      tokenManagerReceiptMintTokenAccountId:
-        tokenManagerReceiptMintTokenAccountId,
-      originalMintId: params.originalMintId,
-      receiptMintId: params.receiptMintId,
-      receiptType: params.receiptType,
-    })
+  const stakeEntryReceiptMintTokenAccountId = await findAta(
+    params.receiptMintId,
+    params.stakeEntryId,
+    true
   );
+  const userReceiptMintTokenAccountId = await findAta(
+    params.receiptMintId,
+    wallet.publicKey,
+    true
+  );
+  const [tokenManagerId] = await findTokenManagerAddress(params.receiptMintId);
+  const [mintCounterId] = await findMintCounterId(params.receiptMintId);
+  const remainingAccountsForKind = await getRemainingAccountsForKind(
+    params.receiptMintId,
+    params.receiptType === ReceiptType.Original
+      ? TokenManagerKind.Edition
+      : TokenManagerKind.Managed
+  );
+
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .claimReceiptMint()
+    .accounts({
+      stakeEntry: params.stakeEntryId,
+      originalMint: params.originalMintId,
+      receiptMint: params.receiptMintId,
+      stakeEntryReceiptMintTokenAccount: stakeEntryReceiptMintTokenAccountId,
+      user: wallet.publicKey,
+      userReceiptMintTokenAccount: userReceiptMintTokenAccountId,
+      tokenManagerReceiptMintTokenAccount:
+        tokenManagerReceiptMintTokenAccountId,
+      tokenManager: tokenManagerId,
+      mintCounter: mintCounterId,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenManagerProgram: TOKEN_MANAGER_ADDRESS,
+      associatedTokenProgram: ASSOCIATED_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
+    })
+    .remainingAccounts(remainingAccountsForKind)
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
@@ -365,17 +443,20 @@ export const withStake = async (
       true
     );
 
-  transaction.add(
-    stake(connection, wallet, {
-      stakeEntryId: stakeEntryId,
-      stakePoolId: params.stakePoolId,
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .stake(params.amount || new BN(0))
+    .accounts({
+      stakeEntry: stakeEntryId,
+      stakePool: params.stakePoolId,
+      stakeEntryOriginalMintTokenAccount: stakeEntryOriginalMintTokenAccountId,
       originalMint: params.originalMintId,
-      stakeEntryOriginalMintTokenAccountId:
-        stakeEntryOriginalMintTokenAccountId,
-      userOriginalMintTokenAccountId: params.userOriginalMintTokenAccountId,
-      amount: params.amount || new BN(1),
+      user: wallet.publicKey,
+      userOriginalMintTokenAccount: params.userOriginalMintTokenAccountId,
+      tokenProgram: TOKEN_PROGRAM_ID,
     })
-  );
+    .instruction();
+  transaction.add(ix);
 
   return transaction;
 };
@@ -463,17 +544,21 @@ export const withUnstake = async (
     stakeEntryData?.parsed.stakeMint
   );
 
-  transaction.add(
-    unstake(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      stakeEntryId: stakeEntryId,
-      originalMintId: params.originalMintId,
-      user: wallet.publicKey,
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .unstake()
+    .accounts({
+      stakePool: params.stakePoolId,
+      stakeEntry: stakeEntryId,
+      originalMint: params.originalMintId,
       stakeEntryOriginalMintTokenAccount: stakeEntryOriginalMintTokenAccountId,
+      user: wallet.publicKey,
       userOriginalMintTokenAccount: userOriginalMintTokenAccountId,
-      remainingAccounts,
+      tokenProgram: TOKEN_PROGRAM_ID,
     })
-  );
+    .remainingAccounts(remainingAccounts)
+    .instruction();
+  transaction.add(ix);
 
   // claim any rewards deserved
   if (rewardDistributorData) {
@@ -488,7 +573,7 @@ export const withUnstake = async (
   return transaction;
 };
 
-export const withUpdateStakePool = (
+export const withUpdateStakePool = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -505,27 +590,32 @@ export const withUpdateStakePool = (
     endDate?: BN;
     doubleOrResetEnabled?: boolean;
   }
-): [Transaction, PublicKey] => {
-  transaction.add(
-    updateStakePool(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      requiresCreators: params.requiresCreators || [],
-      requiresCollections: params.requiresCollections || [],
-      requiresAuthorization: params.requiresAuthorization || false,
-      overlayText: params.overlayText || "STAKED",
+): Promise<[Transaction, PublicKey]> => {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .updatePool({
       imageUri: params.imageUri || "",
+      overlayText: params.overlayText || "STAKED",
+      requiresCollections: params.requiresCollections || [],
+      requiresCreators: params.requiresCreators || [],
+      requiresAuthorization: params.requiresAuthorization || false,
       authority: wallet.publicKey,
       resetOnStake: params.resetOnStake || false,
-      cooldownSeconds: params.cooldownSeconds,
-      minStakeSeconds: params.minStakeSeconds,
-      endDate: params.endDate,
-      doubleOrResetEnabled: params.doubleOrResetEnabled,
+      cooldownSeconds: params.cooldownSeconds || null,
+      minStakeSeconds: params.minStakeSeconds || null,
+      endDate: params.endDate || null,
+      doubleOrResetEnabled: params.doubleOrResetEnabled || null,
     })
-  );
+    .accounts({
+      stakePool: params.stakePoolId,
+      payer: wallet.publicKey,
+    })
+    .instruction();
+  transaction.add(ix);
   return [transaction, params.stakePoolId];
 };
 
-export const withUpdateTotalStakeSeconds = (
+export const withUpdateTotalStakeSeconds = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -533,13 +623,16 @@ export const withUpdateTotalStakeSeconds = (
     stakeEntryId: PublicKey;
     lastStaker: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    updateTotalStakeSeconds(connection, wallet, {
-      stakEntryId: params.stakeEntryId,
+): Promise<Transaction> => {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .updateTotalStakeSeconds()
+    .accounts({
+      stakeEntry: params.stakeEntryId,
       lastStaker: params.lastStaker,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
@@ -589,37 +682,67 @@ export const withReturnReceiptMint = async (
     wallet,
     tokenManagerData
   );
+  const tokenManagerTokenAccountId = await findAta(
+    receiptMint,
+    tokenManagerData.pubkey,
+    true
+  );
+  const userReceiptMintTokenAccountId = await findAta(
+    receiptMint,
+    wallet.publicKey,
+    true
+  );
+  const transferAccounts = await getRemainingAccountsForKind(
+    receiptMint,
+    tokenManagerData.parsed.kind
+  );
 
-  transaction.add(
-    await returnReceiptMint(connection, wallet, {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .returnReceiptMint()
+    .accounts({
       stakeEntry: params.stakeEntryId,
       receiptMint: receiptMint,
-      tokenManagerKind: tokenManagerData.parsed.kind,
-      tokenManagerState: tokenManagerData.parsed.state,
-      returnAccounts: remainingAccountsForReturn,
+      tokenManager: tokenManagerData.pubkey,
+      tokenManagerTokenAccount: tokenManagerTokenAccountId,
+      userReceiptMintTokenAccount: userReceiptMintTokenAccountId,
+      user: wallet.publicKey,
+      collector: CRANK_KEY,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenManagerProgram: TOKEN_MANAGER_ADDRESS,
     })
-  );
+    .remainingAccounts([
+      ...(tokenManagerData.parsed.kind === TokenManagerState.Claimed
+        ? transferAccounts
+        : []),
+      ...remainingAccountsForReturn,
+    ])
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withCloseStakePool = (
+export const withCloseStakePool = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
   params: {
     stakePoolId: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    closeStakePool(connection, wallet, {
-      stakePoolId: params.stakePoolId,
+): Promise<Transaction> => {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .closeStakePool()
+    .accounts({
+      stakePool: params.stakePoolId,
       authority: wallet.publicKey,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withCloseStakeEntry = (
+export const withCloseStakeEntry = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -627,18 +750,21 @@ export const withCloseStakeEntry = (
     stakePoolId: PublicKey;
     stakeEntryId: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    closeStakeEntry(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      stakeEntryId: params.stakeEntryId,
+): Promise<Transaction> => {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .closeStakeEntry()
+    .accounts({
+      stakePool: params.stakePoolId,
+      stakeEntry: params.stakeEntryId,
       authority: wallet.publicKey,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withReassignStakeEntry = (
+export const withReassignStakeEntry = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -647,18 +773,21 @@ export const withReassignStakeEntry = (
     stakeEntryId: PublicKey;
     target: PublicKey;
   }
-) => {
-  transaction.add(
-    reassignStakeEntry(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      stakeEntryId: params.stakeEntryId,
-      target: params.target,
+): Promise<Transaction> => {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .reassignStakeEntry({ target: params.target })
+    .accounts({
+      stakePool: params.stakePoolId,
+      stakeEntry: params.stakeEntryId,
+      lastStaker: wallet.publicKey,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withDoubleOrResetTotalStakeSeconds = (
+export const withDoubleOrResetTotalStakeSeconds = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -666,17 +795,22 @@ export const withDoubleOrResetTotalStakeSeconds = (
     stakePoolId: PublicKey;
     stakeEntryId: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    doubleOrResetTotalStakeSeconds(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      stakeEntryId: params.stakeEntryId,
+): Promise<Transaction> => {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .doubleOrResetTotalStakeSeconds()
+    .accounts({
+      stakeEntry: params.stakeEntryId,
+      stakePool: params.stakePoolId,
+      lastStaker: wallet.publicKey,
+      recentSlothashes: SYSVAR_SLOT_HASHES_PUBKEY,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withInitStakeBooster = (
+export const withInitStakeBooster = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -689,16 +823,35 @@ export const withInitStakeBooster = (
     startTimeSeconds: number;
     payer?: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    initStakeBooster(connection, wallet, {
-      ...params,
-    })
+): Promise<Transaction> => {
+  const stakeBoosterId = findStakeBoosterId(
+    params.stakePoolId,
+    params.stakeBoosterIdentifier
   );
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .initStakeBooster({
+      stakePool: params.stakePoolId,
+      identifier: params.stakeBoosterIdentifier || new BN(0),
+      paymentAmount: params.paymentAmount,
+      paymentMint: params.paymentMint,
+      paymentManager: STAKE_BOOSTER_PAYMENT_MANAGER,
+      boostSeconds: params.boostSeconds,
+      startTimeSeconds: new BN(params.startTimeSeconds),
+    })
+    .accounts({
+      stakeBooster: stakeBoosterId,
+      stakePool: params.stakePoolId,
+      authority: wallet.publicKey,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withUpdateStakeBooster = (
+export const withUpdateStakeBooster = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -710,16 +863,31 @@ export const withUpdateStakeBooster = (
     boostSeconds: BN;
     startTimeSeconds: number;
   }
-) => {
-  transaction.add(
-    updateStakeBooster(connection, wallet, {
-      ...params,
-    })
+): Promise<Transaction> => {
+  const stakeBoosterId = findStakeBoosterId(
+    params.stakePoolId,
+    params.stakeBoosterIdentifier
   );
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .updateStakeBooster({
+      paymentAmount: params.paymentAmount,
+      paymentMint: params.paymentMint,
+      paymentManager: STAKE_BOOSTER_PAYMENT_MANAGER,
+      boostSeconds: params.boostSeconds,
+      startTimeSeconds: new BN(params.startTimeSeconds),
+    })
+    .accounts({
+      stakeBooster: stakeBoosterId,
+      stakePool: params.stakePoolId,
+      authority: wallet.publicKey,
+    })
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withCloseStakeBooster = (
+export const withCloseStakeBooster = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -727,12 +895,21 @@ export const withCloseStakeBooster = (
     stakePoolId: PublicKey;
     stakeBoosterIdentifier?: BN;
   }
-) => {
-  transaction.add(
-    closeStakeBooster(connection, wallet, {
-      ...params,
-    })
+): Promise<Transaction> => {
+  const stakeBoosterId = findStakeBoosterId(
+    params.stakePoolId,
+    params.stakeBoosterIdentifier
   );
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .closeStakeBooster()
+    .accounts({
+      stakeBooster: stakeBoosterId,
+      stakePool: params.stakePoolId,
+      authority: wallet.publicKey,
+    })
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
@@ -775,15 +952,25 @@ export const withBoostStakeEntry = async (
       stakeBooster.parsed.paymentRecipient,
       params.payer ?? wallet.publicKey
     );
-  transaction.add(
-    boostStakeEntry(connection, wallet, {
-      ...params,
-      paymentManager: stakeBooster.parsed.paymentManager,
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .boostStakeEntry({ secondsToBoost: params.secondsToBoost })
+    .accounts({
+      stakeBooster: stakeBooster.pubkey,
+      stakePool: params.stakePoolId,
+      stakeEntry: params.stakeEntryId,
+      originalMint: params.originalMintId,
+      payerTokenAccount: params.payerTokenAccount,
       paymentRecipientTokenAccount: paymentRecipientTokenAccount,
-      originalMintId: params.originalMintId,
+      payer: wallet.publicKey,
+      paymentManager: stakeBooster.parsed.paymentManager,
       feeCollectorTokenAccount: feeCollectorTokenAccount,
+      cardinalPaymentManager: PAYMENT_MANAGER_ADDRESS,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
@@ -800,15 +987,26 @@ export const withInitGroupStakeEntry = async (
   connection: Connection,
   wallet: Wallet,
   params: {
-    groupCooldownSeconds?: number;
-    groupStakeSeconds?: number;
+    groupCooldownSeconds: number;
+    groupStakeSeconds: number;
   }
 ): Promise<[Transaction, PublicKey]> => {
-  const [tx, groupEntryId] = await initGroupStakeEntry(connection, wallet, {
-    groupCooldownSeconds: params.groupCooldownSeconds,
-    groupStakeSeconds: params.groupStakeSeconds,
-  });
-  transaction.add(tx);
+  const id = Keypair.generate();
+  const program = stakePoolProgram(connection, wallet);
+  const groupEntryId = findGroupEntryId(id.publicKey);
+  const ix = await program.methods
+    .initGroupEntry({
+      groupId: id.publicKey,
+      groupCooldownSeconds: params.groupCooldownSeconds,
+      groupStakeSeconds: params.groupStakeSeconds,
+    })
+    .accounts({
+      groupEntry: id.publicKey,
+      authority: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  transaction.add(ix);
   return [transaction, groupEntryId];
 };
 
@@ -829,12 +1027,18 @@ export const withAddToGroupEntry = async (
     stakeEntryId: PublicKey;
   }
 ): Promise<[Transaction]> => {
-  transaction.add(
-    await addToGroupEntry(connection, wallet, {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .addToGroupEntry()
+    .accounts({
       groupEntry: params.groupEntryId,
       stakeEntry: params.stakeEntryId,
+      authority: wallet.publicKey,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return [transaction];
 };
 
@@ -855,12 +1059,18 @@ export const withRemoveFromGroupEntry = async (
     stakeEntryId: PublicKey;
   }
 ): Promise<[Transaction]> => {
-  transaction.add(
-    await removeFromGroupEntry(connection, wallet, {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .removeFromGroupEntry()
+    .accounts({
       groupEntry: params.groupEntryId,
       stakeEntry: params.stakeEntryId,
+      authority: wallet.publicKey,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return [transaction];
 };
 
@@ -880,10 +1090,14 @@ export const withCloseGroupEntry = async (
     groupEntryId: PublicKey;
   }
 ): Promise<[Transaction]> => {
-  transaction.add(
-    await closeGroupEntry(connection, wallet, {
+  const program = stakePoolProgram(connection, wallet);
+  const ix = await program.methods
+    .closeGroupEntry()
+    .accounts({
       groupEntry: params.groupEntryId,
+      authority: wallet.publicKey,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return [transaction];
 };
