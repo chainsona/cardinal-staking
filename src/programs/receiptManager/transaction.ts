@@ -143,10 +143,10 @@ export const withUpdateReceiptManager = async (
     params.stakePoolId,
     params.name
   );
-  const receiptManagerData = await tryGetAccount(() =>
-    getReceiptManager(connection, receiptManagerId)
+  const receiptManagerData = await getReceiptManager(
+    connection,
+    receiptManagerId
   );
-  if (!receiptManagerData) throw "No receipt manager found";
 
   const program = receiptManagerProgram(connection, wallet);
   const ix = await program.methods
@@ -225,7 +225,7 @@ export const withClaimRewardReceipt = async (
       connection,
       checkReceiptManager.parsed.paymentMint,
       checkReceiptManager.parsed.paymentRecipient,
-      wallet.publicKey
+      params.payer ?? wallet.publicKey
     );
   const payerTokenAccountId = await withFindOrInitAssociatedTokenAccount(
     transaction,

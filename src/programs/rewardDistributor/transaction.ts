@@ -299,10 +299,10 @@ export const withUpdateRewardDistributor = async (
   }
 ): Promise<Transaction> => {
   const rewardDistributorId = findRewardDistributorId(params.stakePoolId);
-  const rewardDistributorData = await tryGetAccount(() =>
-    getRewardDistributor(connection, rewardDistributorId)
+  const rewardDistributorData = await getRewardDistributor(
+    connection,
+    rewardDistributorId
   );
-  if (!rewardDistributorData) throw "No reward distirbutor found";
   const program = rewardDistributorProgram(connection, wallet);
   const ix = await program.methods
     .updateRewardDistributor({
