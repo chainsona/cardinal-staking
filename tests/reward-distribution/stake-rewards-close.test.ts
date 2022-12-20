@@ -259,10 +259,15 @@ describe("Stake claim rewards and close", () => {
       stakePoolId,
       originalMintId
     );
-    withCloseRewardEntry(transaction, provider.connection, provider.wallet, {
-      stakePoolId: stakePoolId,
-      stakeEntryId: stakeEntryId,
-    });
+    await withCloseRewardEntry(
+      transaction,
+      provider.connection,
+      provider.wallet,
+      {
+        stakePoolId: stakePoolId,
+        stakeEntryId: stakeEntryId,
+      }
+    );
     await executeTransaction(provider.connection, transaction, provider.wallet);
 
     const rewardDistributorId = findRewardDistributorId(stakePoolId);

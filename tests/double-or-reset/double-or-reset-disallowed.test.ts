@@ -77,7 +77,7 @@ describe("Create stake pool", () => {
   });
 
   it("Double or reset", async () => {
-    const transaction = withDoubleOrResetTotalStakeSeconds(
+    const transaction = await withDoubleOrResetTotalStakeSeconds(
       new Transaction(),
       provider.connection,
       provider.wallet,

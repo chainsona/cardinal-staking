@@ -57,6 +57,7 @@ import {
 } from "./pda";
 import {
   findStakeEntryIdFromMint,
+  remainingAccountsForInitStakeEntry,
   withRemainingAccountsForUnstake,
 } from "./utils";
 
@@ -173,6 +174,10 @@ export const withInitStakeEntry = async (
   );
   const originalMintMetadatId = findMintMetadataId(params.originalMintId);
 
+  const remainingAccounts = remainingAccountsForInitStakeEntry(
+    params.stakePoolId,
+    params.originalMintId
+  );
   const program = stakePoolProgram(connection, wallet);
   const ix = await program.methods
     .initEntry(wallet.publicKey)
@@ -184,6 +189,7 @@ export const withInitStakeEntry = async (
       payer: wallet.publicKey,
       systemProgram: SystemProgram.programId,
     })
+    .remainingAccounts(remainingAccounts)
     .instruction();
   transaction.add(ix);
   return [transaction, stakeEntryId];
@@ -445,7 +451,7 @@ export const withStake = async (
 
   const program = stakePoolProgram(connection, wallet);
   const ix = await program.methods
-    .stake(params.amount || new BN(0))
+    .stake(params.amount || new BN(1))
     .accounts({
       stakeEntry: stakeEntryId,
       stakePool: params.stakePoolId,
@@ -710,9 +716,10 @@ export const withReturnReceiptMint = async (
       collector: CRANK_KEY,
       tokenProgram: TOKEN_PROGRAM_ID,
       tokenManagerProgram: TOKEN_MANAGER_ADDRESS,
+      rent: SYSVAR_RENT_PUBKEY,
     })
     .remainingAccounts([
-      ...(tokenManagerData.parsed.kind === TokenManagerState.Claimed
+      ...(tokenManagerData.parsed.state === TokenManagerState.Claimed
         ? transferAccounts
         : []),
       ...remainingAccountsForReturn,
@@ -987,8 +994,8 @@ export const withInitGroupStakeEntry = async (
   connection: Connection,
   wallet: Wallet,
   params: {
-    groupCooldownSeconds: number;
-    groupStakeSeconds: number;
+    groupCooldownSeconds?: number;
+    groupStakeSeconds?: number;
   }
 ): Promise<[Transaction, PublicKey]> => {
   const id = Keypair.generate();
@@ -997,11 +1004,11 @@ export const withInitGroupStakeEntry = async (
   const ix = await program.methods
     .initGroupEntry({
       groupId: id.publicKey,
-      groupCooldownSeconds: params.groupCooldownSeconds,
-      groupStakeSeconds: params.groupStakeSeconds,
+      groupCooldownSeconds: params.groupCooldownSeconds || null,
+      groupStakeSeconds: params.groupStakeSeconds || null,
     })
     .accounts({
-      groupEntry: id.publicKey,
+      groupEntry: groupEntryId,
       authority: wallet.publicKey,
       systemProgram: SystemProgram.programId,
     })
@@ -1025,6 +1032,7 @@ export const withAddToGroupEntry = async (
   params: {
     groupEntryId: PublicKey;
     stakeEntryId: PublicKey;
+    payer?: PublicKey;
   }
 ): Promise<[Transaction]> => {
   const program = stakePoolProgram(connection, wallet);
@@ -1034,7 +1042,7 @@ export const withAddToGroupEntry = async (
       groupEntry: params.groupEntryId,
       stakeEntry: params.stakeEntryId,
       authority: wallet.publicKey,
-      payer: wallet.publicKey,
+      payer: params.payer ?? wallet.publicKey,
       systemProgram: SystemProgram.programId,
     })
     .instruction();

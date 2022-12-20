@@ -15,12 +15,14 @@ import {
   getRewardDistributor,
   getRewardEntry,
 } from "../../../src/programs/rewardDistributor/accounts";
-import { updateRewardEntry } from "../../../src/programs/rewardDistributor/instruction";
 import {
   findRewardDistributorId,
   findRewardEntryId,
 } from "../../../src/programs/rewardDistributor/pda";
-import { withInitRewardDistributor } from "../../../src/programs/rewardDistributor/transaction";
+import {
+  withInitRewardDistributor,
+  withUpdateRewardEntry,
+} from "../../../src/programs/rewardDistributor/transaction";
 import { getStakeEntry } from "../../../src/programs/stakePool/accounts";
 import { findStakeEntryIdFromMint } from "../../../src/programs/stakePool/utils";
 import { createMint, delay, executeTransaction } from "../../utils";
@@ -114,12 +116,16 @@ describe("Stake and claim rewards", () => {
       }
     );
 
-    transaction.add(
-      updateRewardEntry(provider.connection, provider.wallet, {
+    await withUpdateRewardEntry(
+      transaction,
+      provider.connection,
+      provider.wallet,
+      {
         stakePoolId: stakePoolId,
+        rewardDistributorId: rewardDistributorId,
         stakeEntryId: stakeEntryId,
         multiplier: new BN(12481),
-      })
+      }
     );
     await executeTransaction(provider.connection, transaction, provider.wallet);
 

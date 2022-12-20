@@ -122,16 +122,21 @@ describe("Receipt manager claim reward receipt", () => {
 
   it("Fail To Create Reward Receipt Manager", async () => {
     const transaction = new Transaction();
-    withInitReceiptManager(transaction, provider.connection, provider.wallet, {
-      name: receiptManagerName,
-      stakePoolId: stakePoolId,
-      authority: provider.wallet.publicKey,
-      requiredStakeSeconds: requiredStakeSeconds,
-      stakeSecondsToUse: stakeSecondsToUse,
-      paymentMint: Keypair.generate().publicKey,
-      paymentRecipientId: paymentRecipient.publicKey,
-      requiresAuthorization: requiresAuthorization,
-    });
+    await withInitReceiptManager(
+      transaction,
+      provider.connection,
+      provider.wallet,
+      {
+        name: receiptManagerName,
+        stakePoolId: stakePoolId,
+        authority: provider.wallet.publicKey,
+        requiredStakeSeconds: requiredStakeSeconds,
+        stakeSecondsToUse: stakeSecondsToUse,
+        paymentMint: Keypair.generate().publicKey,
+        paymentRecipientId: paymentRecipient.publicKey,
+        requiresAuthorization: requiresAuthorization,
+      }
+    );
     await expect(
       executeTransaction(provider.connection, transaction, provider.wallet, {
         silent: true,
@@ -141,7 +146,7 @@ describe("Receipt manager claim reward receipt", () => {
 
   it("Create Reward Receipt Manager", async () => {
     const transaction = new Transaction();
-    const [, receiptManagerId] = withInitReceiptManager(
+    const [, receiptManagerId] = await withInitReceiptManager(
       transaction,
       provider.connection,
       provider.wallet,
@@ -270,7 +275,7 @@ describe("Receipt manager claim reward receipt", () => {
       false
     );
 
-    const [, receiptEntryId] = withInitReceiptEntry(
+    const [, receiptEntryId] = await withInitReceiptEntry(
       transaction,
       provider.connection,
       provider.wallet,
@@ -278,7 +283,7 @@ describe("Receipt manager claim reward receipt", () => {
         stakeEntryId: stakeEntryId,
       }
     );
-    const [, rewardReceiptId] = withInitRewardReceipt(
+    const [, rewardReceiptId] = await withInitRewardReceipt(
       transaction,
       provider.connection,
       provider.wallet,

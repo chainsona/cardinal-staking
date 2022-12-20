@@ -2,31 +2,27 @@ import {
   tryGetAccount,
   withFindOrInitAssociatedTokenAccount,
 } from "@cardinal/common";
+import { PAYMENT_MANAGER_ADDRESS } from "@cardinal/payment-manager";
 import { getPaymentManager } from "@cardinal/payment-manager/dist/cjs/accounts";
 import type { BN } from "@project-serum/anchor";
 import type { Wallet } from "@project-serum/anchor/dist/cjs/provider";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import type { Connection, PublicKey, Transaction } from "@solana/web3.js";
+import { SystemProgram } from "@solana/web3.js";
 
-import { updateTotalStakeSeconds } from "../stakePool/instruction";
+import { withUpdateTotalStakeSeconds } from "../stakePool/transaction";
 import { getReceiptManager } from "./accounts";
 import {
-  claimRewardReceipt,
-  closeReceiptEntry,
-  closeReceiptManager,
-  closeRewardReceipt,
-  initReceiptEntry,
-  initReceiptManager,
-  initRewardReceipt,
-  setRewardReceiptAllowed,
-  updateReceiptManager,
-} from "./instruction";
+  RECEIPT_MANAGER_PAYMENT_MANAGER,
+  receiptManagerProgram,
+} from "./constants";
 import {
   findReceiptEntryId,
   findReceiptManagerId,
   findRewardReceiptId,
 } from "./pda";
 
-export const withInitReceiptManager = (
+export const withInitReceiptManager = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -42,48 +38,60 @@ export const withInitReceiptManager = (
     requiresAuthorization: boolean;
     maxClaimedReceipts?: BN;
   }
-): [Transaction, PublicKey] => {
+): Promise<[Transaction, PublicKey]> => {
   const receiptManagerId = findReceiptManagerId(
     params.stakePoolId,
     params.name
   );
-  transaction.add(
-    initReceiptManager(connection, wallet, {
-      receiptManager: receiptManagerId,
-      stakePoolId: params.stakePoolId,
+  const program = receiptManagerProgram(connection, wallet);
+  const ix = await program.methods
+    .initReceiptManager({
       name: params.name,
       authority: params.authority,
       requiredStakeSeconds: params.requiredStakeSeconds,
       stakeSecondsToUse: params.stakeSecondsToUse,
       paymentMint: params.paymentMint,
-      paymentManager: params.paymentManagerId,
+      paymentManager:
+        params.paymentManagerId || RECEIPT_MANAGER_PAYMENT_MANAGER,
       paymentRecipient: params.paymentRecipientId,
       requiresAuthorization: params.requiresAuthorization,
-      maxClaimedReceipts: params.maxClaimedReceipts,
+      maxClaimedReceipts: params.maxClaimedReceipts ?? null,
     })
-  );
+    .accounts({
+      receiptManager: receiptManagerId,
+      stakePool: params.stakePoolId,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  transaction.add(ix);
   return [transaction, receiptManagerId];
 };
 
-export const withInitReceiptEntry = (
+export const withInitReceiptEntry = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
   params: {
     stakeEntryId: PublicKey;
   }
-): [Transaction, PublicKey] => {
+): Promise<[Transaction, PublicKey]> => {
   const receiptEntryId = findReceiptEntryId(params.stakeEntryId);
-  transaction.add(
-    initReceiptEntry(connection, wallet, {
+  const program = receiptManagerProgram(connection, wallet);
+  const ix = await program.methods
+    .initReceiptEntry()
+    .accounts({
       receiptEntry: receiptEntryId,
       stakeEntry: params.stakeEntryId,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return [transaction, receiptEntryId];
 };
 
-export const withInitRewardReceipt = (
+export const withInitRewardReceipt = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -93,24 +101,28 @@ export const withInitRewardReceipt = (
     stakeEntryId: PublicKey;
     payer?: PublicKey;
   }
-): [Transaction, PublicKey] => {
+): Promise<[Transaction, PublicKey]> => {
   const rewardReceiptId = findRewardReceiptId(
     params.receiptManagerId,
     params.receiptEntryId
   );
-  transaction.add(
-    initRewardReceipt(connection, wallet, {
+  const program = receiptManagerProgram(connection, wallet);
+  const ix = await program.methods
+    .initRewardReceipt()
+    .accounts({
       rewardReceipt: rewardReceiptId,
       receiptManager: params.receiptManagerId,
       receiptEntry: params.receiptEntryId,
       stakeEntry: params.stakeEntryId,
-      payer: params.payer ?? wallet.publicKey,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return [transaction, rewardReceiptId];
 };
 
-export const withUpdateReceiptManager = (
+export const withUpdateReceiptManager = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -126,25 +138,43 @@ export const withUpdateReceiptManager = (
     requiresAuthorization: boolean;
     maxClaimedReceipts?: BN;
   }
-): [Transaction, PublicKey] => {
+): Promise<[Transaction, PublicKey]> => {
   const receiptManagerId = findReceiptManagerId(
     params.stakePoolId,
     params.name
   );
-
-  transaction.add(
-    updateReceiptManager(connection, wallet, {
-      authority: params.authority,
-      requiredStakeSeconds: params.requiredStakeSeconds,
-      stakeSecondsToUse: params.stakeSecondsToUse,
-      receiptManager: receiptManagerId,
-      paymentMint: params.paymentMint,
-      paymentManager: params.paymentManagerId,
-      paymentRecipient: params.paymentRecipientId,
-      requiresAuthorization: params.requiresAuthorization,
-      maxClaimedReceipts: params.maxClaimedReceipts ?? undefined,
-    })
+  const receiptManagerData = await tryGetAccount(() =>
+    getReceiptManager(connection, receiptManagerId)
   );
+  if (!receiptManagerData) throw "No receipt manager found";
+
+  const program = receiptManagerProgram(connection, wallet);
+  const ix = await program.methods
+    .updateReceiptManager({
+      authority: params.authority || receiptManagerData.parsed.authority,
+      requiredStakeSeconds:
+        params.requiredStakeSeconds ||
+        receiptManagerData.parsed.requiredStakeSeconds,
+      stakeSecondsToUse:
+        params.stakeSecondsToUse || receiptManagerData.parsed.stakeSecondsToUse,
+      paymentMint: params.paymentMint || receiptManagerData.parsed.paymentMint,
+      paymentManager:
+        params.paymentManagerId || receiptManagerData.parsed.paymentManager,
+      paymentRecipient:
+        params.paymentRecipientId || receiptManagerData.parsed.paymentRecipient,
+      requiresAuthorization:
+        params.requiresAuthorization ||
+        receiptManagerData.parsed.requiresAuthorization,
+      maxClaimedReceipts:
+        params.maxClaimedReceipts ||
+        receiptManagerData.parsed.maxClaimedReceipts,
+    })
+    .accounts({
+      receiptManager: receiptManagerId,
+      authority: wallet.publicKey,
+    })
+    .instruction();
+  transaction.add(ix);
   return [transaction, receiptManagerId];
 };
 
@@ -205,48 +235,55 @@ export const withClaimRewardReceipt = async (
     wallet.publicKey
   );
 
-  transaction.add(
-    updateTotalStakeSeconds(connection, wallet, {
-      stakEntryId: params.stakeEntryId,
-      lastStaker: params.claimer,
-    })
-  );
+  await withUpdateTotalStakeSeconds(transaction, connection, wallet, {
+    stakeEntryId: params.stakeEntryId,
+    lastStaker: params.claimer,
+  });
 
-  transaction.add(
-    claimRewardReceipt(connection, wallet, {
-      receiptManager: receiptManagerId,
+  const program = receiptManagerProgram(connection, wallet);
+  const ix = await program.methods
+    .claimRewardReceipt()
+    .accounts({
       rewardReceipt: rewardReceiptId,
+      receiptManager: receiptManagerId,
       stakeEntry: params.stakeEntryId,
       receiptEntry: receiptEntryId,
       paymentManager: checkReceiptManager.parsed.paymentManager,
       feeCollectorTokenAccount: feeCollectorTokenAccountId,
       paymentRecipientTokenAccount: paymentRecipientTokenAccountId,
       payerTokenAccount: payerTokenAccountId,
-      payer: params.payer,
+      payer: wallet.publicKey,
       claimer: params.claimer,
-      initializer: wallet.publicKey,
+      cardinalPaymentManager: PAYMENT_MANAGER_ADDRESS,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return [transaction, rewardReceiptId];
 };
 
-export const withCloseReceiptManager = (
+export const withCloseReceiptManager = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
   params: {
     receiptManagerId: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    closeReceiptManager(connection, wallet, {
+): Promise<Transaction> => {
+  const program = receiptManagerProgram(connection, wallet);
+  const ix = await program.methods
+    .closeReceiptManager()
+    .accounts({
       receiptManager: params.receiptManagerId,
+      authority: wallet.publicKey,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withCloseReceiptEntry = (
+export const withCloseReceiptEntry = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -255,18 +292,22 @@ export const withCloseReceiptEntry = (
     receiptEntryId: PublicKey;
     stakeEntryId: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    closeReceiptEntry(connection, wallet, {
-      receiptManager: params.receiptManagerId,
+): Promise<Transaction> => {
+  const program = receiptManagerProgram(connection, wallet);
+  const ix = await program.methods
+    .closeReceiptEntry()
+    .accounts({
       receiptEntry: params.receiptEntryId,
+      receiptManager: params.receiptManagerId,
       stakeEntry: params.stakeEntryId,
+      authority: wallet.publicKey,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withCloseRewardReceipt = (
+export const withCloseRewardReceipt = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -274,17 +315,21 @@ export const withCloseRewardReceipt = (
     receiptManagerId: PublicKey;
     rewardReceiptId: PublicKey;
   }
-): Transaction => {
-  transaction.add(
-    closeRewardReceipt(connection, wallet, {
-      receiptManager: params.receiptManagerId,
+): Promise<Transaction> => {
+  const program = receiptManagerProgram(connection, wallet);
+  const ix = await program.methods
+    .closeRewardReceipt()
+    .accounts({
       rewardReceipt: params.rewardReceiptId,
+      receiptManager: params.receiptManagerId,
+      authority: wallet.publicKey,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };
 
-export const withSetRewardReceiptAllowed = (
+export const withSetRewardReceiptAllowed = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -293,13 +338,16 @@ export const withSetRewardReceiptAllowed = (
     rewardReceiptId: PublicKey;
     auth: boolean;
   }
-): Transaction => {
-  transaction.add(
-    setRewardReceiptAllowed(connection, wallet, {
-      auth: params.auth,
+): Promise<Transaction> => {
+  const program = receiptManagerProgram(connection, wallet);
+  const ix = await program.methods
+    .setRewardReceiptAllowed(params.auth)
+    .accounts({
       receiptManager: params.receiptManagerId,
       rewardReceipt: params.rewardReceiptId,
+      authority: wallet.publicKey,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return transaction;
 };

@@ -67,7 +67,7 @@ describe("Stake and claim rewards from treasury", () => {
   it("Update Reward Distributor", async () => {
     const transaction = new Transaction();
 
-    withUpdateRewardDistributor(
+    await withUpdateRewardDistributor(
       transaction,
       provider.connection,
       provider.wallet,

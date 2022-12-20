@@ -49,7 +49,7 @@ describe("Create stake pool", () => {
   });
 
   it("Create booster", async () => {
-    const transaction = withInitStakeBooster(
+    const transaction = await withInitStakeBooster(
       new Transaction(),
       provider.connection,
       provider.wallet,
@@ -86,7 +86,7 @@ describe("Create stake pool", () => {
   });
 
   it("Update booster", async () => {
-    const transaction = withUpdateStakeBooster(
+    const transaction = await withUpdateStakeBooster(
       new Transaction(),
       provider.connection,
       provider.wallet,
@@ -156,7 +156,7 @@ describe("Create stake pool", () => {
 
   it("Close booster", async () => {
     const stakeBoosterId = findStakeBoosterId(stakePoolId);
-    const transaction = withCloseStakeBooster(
+    const transaction = await withCloseStakeBooster(
       new Transaction(),
       provider.connection,
       provider.wallet,

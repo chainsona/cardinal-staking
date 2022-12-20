@@ -6,20 +6,16 @@ import {
 import type { web3 } from "@project-serum/anchor";
 import { BN } from "@project-serum/anchor";
 import type { Wallet } from "@project-serum/anchor/dist/cjs/provider";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import type { Connection, PublicKey, Transaction } from "@solana/web3.js";
+import { SystemProgram } from "@solana/web3.js";
 
 import { getRewardDistributor, getRewardEntry } from "./accounts";
-import { RewardDistributorKind } from "./constants";
 import {
-  claimRewards,
-  closeRewardDistributor,
-  closeRewardEntry,
-  initRewardDistributor,
-  initRewardEntry,
-  reclaimFunds,
-  updateRewardDistributor,
-  updateRewardEntry,
-} from "./instruction";
+  REWARD_MANAGER,
+  RewardDistributorKind,
+  rewardDistributorProgram,
+} from "./constants";
 import { findRewardDistributorId, findRewardEntryId } from "./pda";
 import { withRemainingAccountsForKind } from "./utils";
 
@@ -49,26 +45,34 @@ export const withInitRewardDistributor = async (
     params.kind || RewardDistributorKind.Mint,
     params.rewardMintId
   );
-  transaction.add(
-    initRewardDistributor(connection, wallet, {
-      rewardDistributorId,
-      stakePoolId: params.stakePoolId,
-      rewardMintId: params.rewardMintId,
+  const program = rewardDistributorProgram(connection, wallet);
+  const ix = await program.methods
+    .initRewardDistributor({
       rewardAmount: params.rewardAmount || new BN(1),
       rewardDurationSeconds: params.rewardDurationSeconds || new BN(1),
+      maxSupply: params.maxSupply || null,
+      supply: params.supply || null,
       kind: params.kind || RewardDistributorKind.Mint,
-      remainingAccountsForKind,
-      maxSupply: params.maxSupply,
-      supply: params.supply,
-      defaultMultiplier: params.defaultMultiplier,
-      multiplierDecimals: params.multiplierDecimals,
-      maxRewardSecondsReceived: params.maxRewardSecondsReceived,
+      defaultMultiplier: params.defaultMultiplier || null,
+      multiplierDecimals: params.multiplierDecimals || null,
+      maxRewardSecondsReceived: params.maxRewardSecondsReceived || null,
     })
-  );
+    .accounts({
+      rewardDistributor: rewardDistributorId,
+      stakePool: params.stakePoolId,
+      rewardMint: params.rewardMintId,
+      authority: wallet.publicKey,
+      payer: wallet.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .remainingAccounts(remainingAccountsForKind)
+    .instruction();
+  transaction.add(ix);
   return [transaction, rewardDistributorId];
 };
 
-export const withInitRewardEntry = (
+export const withInitRewardEntry = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -76,18 +80,23 @@ export const withInitRewardEntry = (
     stakeEntryId: PublicKey;
     rewardDistributorId: PublicKey;
   }
-) => {
+): Promise<[Transaction, PublicKey]> => {
   const rewardEntryId = findRewardEntryId(
     params.rewardDistributorId,
     params.stakeEntryId
   );
-  transaction.add(
-    initRewardEntry(connection, wallet, {
-      stakeEntryId: params.stakeEntryId,
+  const program = rewardDistributorProgram(connection, wallet);
+  const ix = await program.methods
+    .initRewardEntry()
+    .accounts({
+      rewardEntry: rewardEntryId,
+      stakeEntry: params.stakeEntryId,
       rewardDistributor: params.rewardDistributorId,
-      rewardEntryId: rewardEntryId,
+      payer: wallet.publicKey,
+      systemProgram: SystemProgram.programId,
     })
-  );
+    .instruction();
+  transaction.add(ix);
   return [transaction, rewardEntryId];
 };
 
@@ -141,26 +150,38 @@ export const withClaimRewards = async (
       getRewardEntry(connection, rewardEntryId)
     );
 
+    const program = rewardDistributorProgram(connection, wallet);
     if (!rewardEntryData) {
-      transaction.add(
-        initRewardEntry(connection, wallet, {
-          stakeEntryId: params.stakeEntryId,
+      const ix = await program.methods
+        .initRewardEntry()
+        .accounts({
+          rewardEntry: rewardEntryId,
+          stakeEntry: params.stakeEntryId,
           rewardDistributor: rewardDistributorData.pubkey,
-          rewardEntryId: rewardEntryId,
-          payer: params.payer,
+          payer: wallet.publicKey,
+          systemProgram: SystemProgram.programId,
         })
-      );
+        .instruction();
+      transaction.add(ix);
     }
 
-    transaction.add(
-      claimRewards(connection, wallet, {
-        stakePoolId: params.stakePoolId,
-        stakeEntryId: params.stakeEntryId,
-        rewardMintId: rewardDistributorData.parsed.rewardMint,
-        rewardMintTokenAccountId: rewardMintTokenAccountId,
-        remainingAccountsForKind,
+    const ix = await program.methods
+      .claimRewards()
+      .accounts({
+        rewardEntry: rewardEntryId,
+        rewardDistributor: rewardDistributorData.pubkey,
+        stakeEntry: params.stakeEntryId,
+        stakePool: params.stakePoolId,
+        rewardMint: rewardDistributorData.parsed.rewardMint,
+        userRewardMintTokenAccount: rewardMintTokenAccountId,
+        rewardManager: REWARD_MANAGER,
+        user: params.payer ?? wallet.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
       })
-    );
+      .remainingAccounts(remainingAccountsForKind)
+      .instruction();
+    transaction.add(ix);
   }
   return transaction;
 };
@@ -188,18 +209,24 @@ export const withCloseRewardDistributor = async (
       rewardDistributorData.parsed.rewardMint
     );
 
-    transaction.add(
-      closeRewardDistributor(connection, wallet, {
-        stakePoolId: params.stakePoolId,
-        rewardMintId: rewardDistributorData.parsed.rewardMint,
-        remainingAccountsForKind,
+    const program = rewardDistributorProgram(connection, wallet);
+    const ix = await program.methods
+      .closeRewardDistributor()
+      .accounts({
+        rewardDistributor: rewardDistributorData.pubkey,
+        stakePool: params.stakePoolId,
+        rewardMint: rewardDistributorData.parsed.rewardMint,
+        signer: wallet.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
       })
-    );
+      .remainingAccounts(remainingAccountsForKind)
+      .instruction();
+    transaction.add(ix);
   }
   return transaction;
 };
 
-export const withUpdateRewardEntry = (
+export const withUpdateRewardEntry = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -209,17 +236,27 @@ export const withUpdateRewardEntry = (
     stakeEntryId: PublicKey;
     multiplier: BN;
   }
-) => {
-  return transaction.add(
-    updateRewardEntry(connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      stakeEntryId: params.stakeEntryId,
+): Promise<Transaction> => {
+  const rewardEntryId = findRewardEntryId(
+    params.rewardDistributorId,
+    params.stakeEntryId
+  );
+  const program = rewardDistributorProgram(connection, wallet);
+  const ix = await program.methods
+    .updateRewardEntry({
       multiplier: params.multiplier,
     })
-  );
+    .accounts({
+      rewardEntry: rewardEntryId,
+      rewardDistributor: params.rewardDistributorId,
+      authority: wallet.publicKey,
+    })
+    .instruction();
+  transaction.add(ix);
+  return transaction.add(ix);
 };
 
-export const withCloseRewardEntry = (
+export const withCloseRewardEntry = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -227,7 +264,7 @@ export const withCloseRewardEntry = (
     stakePoolId: PublicKey;
     stakeEntryId: PublicKey;
   }
-) => {
+): Promise<Transaction> => {
   const rewardDistributorId = findRewardDistributorId(params.stakePoolId);
 
   const rewardEntryId = findRewardEntryId(
@@ -235,15 +272,20 @@ export const withCloseRewardEntry = (
     params.stakeEntryId
   );
 
-  return transaction.add(
-    closeRewardEntry(connection, wallet, {
-      rewardDistributorId: rewardDistributorId,
-      rewardEntryId: rewardEntryId,
+  const program = rewardDistributorProgram(connection, wallet);
+  const ix = await program.methods
+    .closeRewardEntry()
+    .accounts({
+      rewardDistributor: rewardDistributorId,
+      rewardEntry: rewardEntryId,
+      authority: wallet.publicKey,
     })
-  );
+    .instruction();
+  transaction.add(ix);
+  return transaction;
 };
 
-export const withUpdateRewardDistributor = (
+export const withUpdateRewardDistributor = async (
   transaction: Transaction,
   connection: Connection,
   wallet: Wallet,
@@ -255,18 +297,37 @@ export const withUpdateRewardDistributor = (
     rewardDurationSeconds?: BN;
     maxRewardSecondsReceived?: BN;
   }
-) => {
+): Promise<Transaction> => {
   const rewardDistributorId = findRewardDistributorId(params.stakePoolId);
-  return transaction.add(
-    updateRewardDistributor(connection, wallet, {
-      rewardDistributorId: rewardDistributorId,
-      defaultMultiplier: params.defaultMultiplier || new BN(1),
-      multiplierDecimals: params.multiplierDecimals || 0,
-      rewardAmount: params.rewardAmount || new BN(0),
-      rewardDurationSeconds: params.rewardDurationSeconds || new BN(0),
-      maxRewardSecondsReceived: params.maxRewardSecondsReceived,
-    })
+  const rewardDistributorData = await tryGetAccount(() =>
+    getRewardDistributor(connection, rewardDistributorId)
   );
+  if (!rewardDistributorData) throw "No reward distirbutor found";
+  const program = rewardDistributorProgram(connection, wallet);
+  const ix = await program.methods
+    .updateRewardDistributor({
+      defaultMultiplier:
+        params.defaultMultiplier ||
+        rewardDistributorData.parsed.defaultMultiplier,
+      multiplierDecimals:
+        params.multiplierDecimals ||
+        rewardDistributorData.parsed.multiplierDecimals,
+      rewardAmount:
+        params.rewardAmount || rewardDistributorData.parsed.rewardAmount,
+      rewardDurationSeconds:
+        params.rewardDurationSeconds ||
+        rewardDistributorData.parsed.rewardDurationSeconds,
+      maxRewardSecondsReceived:
+        params.maxRewardSecondsReceived ||
+        rewardDistributorData.parsed.maxRewardSecondsReceived,
+    })
+    .accounts({
+      rewardDistributor: rewardDistributorId,
+      authority: wallet.publicKey,
+    })
+    .instruction();
+  transaction.add(ix);
+  return transaction;
 };
 export const withReclaimFunds = async (
   transaction: Transaction,
@@ -301,13 +362,17 @@ export const withReclaimFunds = async (
     true
   );
 
-  return transaction.add(
-    reclaimFunds(connection, wallet, {
-      rewardDistributorId: rewardDistributorId,
-      rewardDistributorTokenAccountId: rewardDistributorTokenAccountId,
-      authorityTokenAccountId: authorityTokenAccountId,
+  const program = rewardDistributorProgram(connection, wallet);
+  const ix = await program.methods
+    .reclaimFunds(params.amount)
+    .accounts({
+      rewardDistributor: rewardDistributorId,
+      rewardDistributorTokenAccount: rewardDistributorTokenAccountId,
+      authorityTokenAccount: authorityTokenAccountId,
       authority: wallet.publicKey,
-      amount: params.amount,
+      tokenProgram: TOKEN_PROGRAM_ID,
     })
-  );
+    .instruction();
+  transaction.add(ix);
+  return transaction;
 };

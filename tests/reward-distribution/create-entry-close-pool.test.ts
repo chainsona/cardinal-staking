@@ -102,7 +102,7 @@ describe("Stake and claim rewards", () => {
         originalMintId: originalMintId,
       }
     );
-    rewardDistributor.transaction.withInitRewardEntry(
+    await rewardDistributor.transaction.withInitRewardEntry(
       transaction,
       provider.connection,
       provider.wallet,
@@ -135,7 +135,7 @@ describe("Stake and claim rewards", () => {
   });
 
   it("Fail close pool", async () => {
-    const transaction = withCloseStakePool(
+    const transaction = await withCloseStakePool(
       new Transaction(),
       provider.connection,
       provider.wallet,
@@ -169,13 +169,23 @@ describe("Stake and claim rewards", () => {
       originalMintId
     );
     const transaction = new Transaction();
-    withCloseStakeEntry(transaction, provider.connection, provider.wallet, {
-      stakePoolId: stakePoolId,
-      stakeEntryId: stakeEntryId,
-    });
-    withCloseStakePool(transaction, provider.connection, provider.wallet, {
-      stakePoolId: stakePoolId,
-    });
+    await withCloseStakeEntry(
+      transaction,
+      provider.connection,
+      provider.wallet,
+      {
+        stakePoolId: stakePoolId,
+        stakeEntryId: stakeEntryId,
+      }
+    );
+    await withCloseStakePool(
+      transaction,
+      provider.connection,
+      provider.wallet,
+      {
+        stakePoolId: stakePoolId,
+      }
+    );
     await executeTransaction(provider.connection, transaction, provider.wallet);
 
     const stakeEntry = await tryGetAccount(() =>

@@ -129,11 +129,16 @@ describe("Reassign stake entry", () => {
       originalMintId,
       false
     );
-    withReassignStakeEntry(transaction, provider.connection, provider.wallet, {
-      stakePoolId: stakePoolId,
-      stakeEntryId: stakeEntryId,
-      target: newStaker.publicKey,
-    });
+    await withReassignStakeEntry(
+      transaction,
+      provider.connection,
+      provider.wallet,
+      {
+        stakePoolId: stakePoolId,
+        stakeEntryId: stakeEntryId,
+        target: newStaker.publicKey,
+      }
+    );
 
     await executeTransaction(provider.connection, transaction, provider.wallet);
 

@@ -91,16 +91,21 @@ describe("Create update close receipt manager", () => {
 
   it("Invalid authority", async () => {
     const transaction = new Transaction();
-    withInitReceiptManager(transaction, provider.connection, provider.wallet, {
-      name: receiptManagerName,
-      stakePoolId: stakePoolId,
-      authority: invalidAuthority.publicKey,
-      requiredStakeSeconds: requiredStakeSeconds,
-      stakeSecondsToUse: stakeSecondsToUse,
-      paymentMint: paymentMint,
-      paymentRecipientId: paymentRecipient.publicKey,
-      requiresAuthorization: requiresAuthorization,
-    });
+    await withInitReceiptManager(
+      transaction,
+      provider.connection,
+      provider.wallet,
+      {
+        name: receiptManagerName,
+        stakePoolId: stakePoolId,
+        authority: invalidAuthority.publicKey,
+        requiredStakeSeconds: requiredStakeSeconds,
+        stakeSecondsToUse: stakeSecondsToUse,
+        paymentMint: paymentMint,
+        paymentRecipientId: paymentRecipient.publicKey,
+        requiresAuthorization: requiresAuthorization,
+      }
+    );
     await expect(
       executeTransaction(
         provider.connection,
@@ -115,7 +120,7 @@ describe("Create update close receipt manager", () => {
 
   it("Create Reward Receipt Manager", async () => {
     const transaction = new Transaction();
-    const [, receiptManagerId] = withInitReceiptManager(
+    const [, receiptManagerId] = await withInitReceiptManager(
       transaction,
       provider.connection,
       provider.wallet,
@@ -164,7 +169,7 @@ describe("Create update close receipt manager", () => {
 
   it("Invalid authority updated", async () => {
     const transaction = new Transaction();
-    withUpdateReceiptManager(
+    await withUpdateReceiptManager(
       transaction,
       provider.connection,
       new Wallet(invalidAuthority),
@@ -191,7 +196,7 @@ describe("Create update close receipt manager", () => {
 
   it("Update reward receipt manager", async () => {
     const transaction = new Transaction();
-    const [, receiptManagerId] = withUpdateReceiptManager(
+    const [, receiptManagerId] = await withUpdateReceiptManager(
       transaction,
       provider.connection,
       provider.wallet,
@@ -243,7 +248,7 @@ describe("Create update close receipt manager", () => {
       stakePoolId,
       receiptManagerName
     );
-    const transaction = withCloseReceiptManager(
+    const transaction = await withCloseReceiptManager(
       new Transaction(),
       provider.connection,
       provider.wallet,

@@ -132,7 +132,7 @@ describe("Receipt manages multiple with disallowlist", () => {
 
   it("Create Reward Receipt Manager", async () => {
     const transaction = new Transaction();
-    const [, receiptManagerId] = withInitReceiptManager(
+    const [, receiptManagerId] = await withInitReceiptManager(
       transaction,
       provider.connection,
       provider.wallet,
@@ -184,7 +184,7 @@ describe("Receipt manages multiple with disallowlist", () => {
 
   it("Create Reward Receipt Manager", async () => {
     const transaction = new Transaction();
-    const [, receiptManagerId] = withInitReceiptManager(
+    const [, receiptManagerId] = await withInitReceiptManager(
       transaction,
       provider.connection,
       provider.wallet,
@@ -311,7 +311,7 @@ describe("Receipt manages multiple with disallowlist", () => {
       originalMintId,
       false
     );
-    const [, receiptEntryId] = withInitReceiptEntry(
+    const [, receiptEntryId] = await withInitReceiptEntry(
       transaction,
       provider.connection,
       provider.wallet,
@@ -346,7 +346,7 @@ describe("Receipt manages multiple with disallowlist", () => {
     );
 
     const receiptEntryId = findReceiptEntryId(stakeEntryId);
-    const [, rewardReceiptId] = withInitRewardReceipt(
+    const [, rewardReceiptId] = await withInitRewardReceipt(
       transaction,
       provider.connection,
       provider.wallet,
@@ -390,7 +390,7 @@ describe("Receipt manages multiple with disallowlist", () => {
     );
 
     const receiptEntryId = findReceiptEntryId(stakeEntryId);
-    const [, rewardReceiptId] = withInitRewardReceipt(
+    const [, rewardReceiptId] = await withInitRewardReceipt(
       transaction,
       provider.connection,
       provider.wallet,
@@ -432,7 +432,7 @@ describe("Receipt manages multiple with disallowlist", () => {
     );
     expect(beforeReceiptManagerData.parsed.requiresAuthorization).toBeFalsy();
 
-    withUpdateReceiptManager(
+    await withUpdateReceiptManager(
       transaction,
       provider.connection,
       provider.wallet,
@@ -479,7 +479,7 @@ describe("Receipt manages multiple with disallowlist", () => {
     );
     expect(beforeReceiptData.parsed.allowed).toBeTruthy();
 
-    withSetRewardReceiptAllowed(
+    await withSetRewardReceiptAllowed(
       transaction,
       provider.connection,
       provider.wallet,

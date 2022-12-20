@@ -202,12 +202,12 @@ export const initializeRewardEntry = async (
   }
 
   const rewardDistributorId = findRewardDistributorId(params.stakePoolId);
-  withInitRewardEntry(transaction, connection, wallet, {
+  await withInitRewardEntry(transaction, connection, wallet, {
     stakeEntryId: stakeEntryId,
     rewardDistributorId: rewardDistributorId,
   });
 
-  withUpdateRewardEntry(transaction, connection, wallet, {
+  await withUpdateRewardEntry(transaction, connection, wallet, {
     stakePoolId: params.stakePoolId,
     rewardDistributorId: rewardDistributorId,
     stakeEntryId: stakeEntryId,
@@ -316,7 +316,7 @@ export const claimRewards = async (
 ): Promise<Transaction> => {
   const transaction = new Transaction();
 
-  withUpdateTotalStakeSeconds(transaction, connection, wallet, {
+  await withUpdateTotalStakeSeconds(transaction, connection, wallet, {
     stakeEntryId: params.stakeEntryId,
     lastStaker: wallet.publicKey,
   });

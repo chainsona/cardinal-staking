@@ -11,10 +11,10 @@ import {
   STAKE_BOOSTER_PAYMENT_MANAGER_NAME,
 } from "../../src/programs/stakePool";
 import { getStakeEntry } from "../../src/programs/stakePool/accounts";
-import { updateTotalStakeSeconds } from "../../src/programs/stakePool/instruction";
 import {
   withBoostStakeEntry,
   withInitStakeBooster,
+  withUpdateTotalStakeSeconds,
 } from "../../src/programs/stakePool/transaction";
 import { findStakeEntryIdFromMint } from "../../src/programs/stakePool/utils";
 import {
@@ -107,7 +107,7 @@ describe("Stake booster boost", () => {
   });
 
   it("Create booster", async () => {
-    const transaction = withInitStakeBooster(
+    const transaction = await withInitStakeBooster(
       new Transaction(),
       provider.connection,
       provider.wallet,
@@ -172,11 +172,15 @@ describe("Stake booster boost", () => {
       provider.connection,
       stakeEntryId
     );
-    const transaction = new Transaction().add(
-      updateTotalStakeSeconds(provider.connection, provider.wallet, {
-        stakEntryId: stakeEntryId,
+    const transaction = new Transaction();
+    await withUpdateTotalStakeSeconds(
+      transaction,
+      provider.connection,
+      provider.wallet,
+      {
+        stakeEntryId: stakeEntryId,
         lastStaker: provider.wallet.publicKey,
-      })
+      }
     );
     await executeTransaction(provider.connection, transaction, provider.wallet);
 

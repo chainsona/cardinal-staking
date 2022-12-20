@@ -52,7 +52,7 @@ describe("Requires authorization success", () => {
   });
 
   it("Authorize mint for stake", async () => {
-    const transaction = authorizeStakeEntry(
+    const transaction = await authorizeStakeEntry(
       provider.connection,
       provider.wallet,
       {
@@ -80,7 +80,7 @@ describe("Requires authorization success", () => {
   });
 
   it("Deathorize mint for stake", async () => {
-    const transaction = withDeauthorizeStakeEntry(
+    const transaction = await withDeauthorizeStakeEntry(
       new Transaction(),
       provider.connection,
       provider.wallet,

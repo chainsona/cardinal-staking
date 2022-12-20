@@ -14,7 +14,7 @@ pub struct DoubleOrResetTotalStakeSecondsCtx<'info> {
     last_staker: Signer<'info>,
     /// CHECK: account constraints checked in account trait
     #[account(address = sysvar::slot_hashes::id())]
-recent_slothashes: UncheckedAccount<'info>,
+    recent_slothashes: UncheckedAccount<'info>,
 }
 
 pub fn handler(ctx: Context<DoubleOrResetTotalStakeSecondsCtx>) -> Result<()> {
