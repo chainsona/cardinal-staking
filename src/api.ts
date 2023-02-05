@@ -381,7 +381,6 @@ export const claimRewards = async (
   }
 ): Promise<Transaction> => {
   const transaction = new Transaction();
-
   await withUpdateTotalStakeSeconds(transaction, connection, wallet, {
     stakeEntryId: params.stakeEntryId,
     lastStaker: wallet.publicKey,
@@ -512,7 +511,7 @@ export const stake = async (
       createAssociatedTokenAccountIdempotentInstruction(
         wallet.publicKey,
         stakeEntryOriginalMintTokenAccountId,
-        wallet.publicKey,
+        stakeEntryId,
         params.originalMintId
       )
     );
