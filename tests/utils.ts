@@ -37,7 +37,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 
-import { findRuleSetId, findTokenRecordId } from "../tools/utils";
+import { findRuleSetId, findTokenRecordId } from "../src";
 
 export function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));

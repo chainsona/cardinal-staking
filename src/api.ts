@@ -37,7 +37,6 @@ import {
   Transaction,
 } from "@solana/web3.js";
 
-import { findTokenRecordId } from "../tools/utils";
 import type { CardinalRewardDistributor } from "./idl/cardinal_reward_distributor";
 import type { CardinalStakePool } from "./idl/cardinal_stake_pool";
 import type {
@@ -99,6 +98,7 @@ import {
   findStakeEntryIdFromMint,
   shouldReturnReceipt,
 } from "./programs/stakePool/utils";
+import { findTokenRecordId } from "./utils";
 
 /**
  * Convenience call to create a stake pool
