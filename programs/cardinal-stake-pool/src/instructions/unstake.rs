@@ -77,6 +77,16 @@ pub fn handler(ctx: Context<UnstakeCtx>) -> Result<()> {
         }
     }
 
+    // give back original mint to user
+    let cpi_accounts = token::Transfer {
+        from: ctx.accounts.stake_entry_original_mint_token_account.to_account_info(),
+        to: ctx.accounts.user_original_mint_token_account.to_account_info(),
+        authority: stake_entry.to_account_info(),
+    };
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+    let cpi_context = CpiContext::new(cpi_program, cpi_accounts).with_signer(stake_entry_signer);
+    token::transfer(cpi_context, stake_entry.amount)?;
+
     stake_entry.total_stake_seconds = stake_entry.total_stake_seconds.saturating_add(
         (u128::try_from(stake_entry.cooldown_start_seconds.unwrap_or(Clock::get().unwrap().unix_timestamp))
             .unwrap()
@@ -94,14 +104,5 @@ pub fn handler(ctx: Context<UnstakeCtx>) -> Result<()> {
     stake_entry.kind = StakeEntryKind::Permissionless as u8;
     stake_entry_fill_zeros(stake_entry)?;
 
-    // give back original mint to user
-    let cpi_accounts = token::Transfer {
-        from: ctx.accounts.stake_entry_original_mint_token_account.to_account_info(),
-        to: ctx.accounts.user_original_mint_token_account.to_account_info(),
-        authority: stake_entry.to_account_info(),
-    };
-    let cpi_program = ctx.accounts.token_program.to_account_info();
-    let cpi_context = CpiContext::new(cpi_program, cpi_accounts).with_signer(stake_entry_signer);
-    token::transfer(cpi_context, stake_entry.amount)?;
     Ok(())
 }
