@@ -1,9 +1,28 @@
-import { tryGetAccount } from "@cardinal/common";
+import {
+  findMintEditionId,
+  findMintMetadataId,
+  METADATA_PROGRAM_ID,
+  tryGetAccount,
+  tryNull,
+  withFindOrInitAssociatedTokenAccount,
+} from "@cardinal/common";
+import { PROGRAM_ID as TOKEN_AUTH_RULES_ID } from "@metaplex-foundation/mpl-token-auth-rules";
+import {
+  Metadata,
+  TokenStandard,
+} from "@metaplex-foundation/mpl-token-metadata";
 import { BN } from "@project-serum/anchor";
 import type { Wallet } from "@project-serum/anchor/dist/cjs/provider";
+import { TOKEN_PROGRAM_ID, unpackMint } from "@solana/spl-token";
 import type { Connection, PublicKey } from "@solana/web3.js";
-import { Keypair, Transaction } from "@solana/web3.js";
+import {
+  Keypair,
+  SystemProgram,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+  Transaction,
+} from "@solana/web3.js";
 
+import { findTokenRecordId } from "../tools/utils";
 import type {
   GroupRewardDistributorKind,
   GroupRewardDistributorMetadataKind,
@@ -26,12 +45,13 @@ import {
   withInitRewardEntry,
   withUpdateRewardEntry,
 } from "./programs/rewardDistributor/transaction";
-import { ReceiptType } from "./programs/stakePool";
+import { ReceiptType, stakePoolProgram } from "./programs/stakePool";
 import {
   getStakeEntries,
   getStakeEntry,
   getStakePool,
 } from "./programs/stakePool/accounts";
+import { findStakeEntryId } from "./programs/stakePool/pda";
 import {
   withAddToGroupEntry,
   withAuthorizeStakeEntry,
@@ -47,7 +67,6 @@ import {
   withUpdateTotalStakeSeconds,
 } from "./programs/stakePool/transaction";
 import { findStakeEntryIdFromMint } from "./programs/stakePool/utils";
-import { getMintSupply } from "./utils";
 
 /**
  * Convenience call to create a stake pool
@@ -356,22 +375,25 @@ export const stake = async (
     amount?: BN;
   }
 ): Promise<Transaction> => {
-  const supply = await getMintSupply(connection, params.originalMintId);
-  if (
-    (supply.gt(new BN(1)) || params.amount?.gt(new BN(1))) &&
-    params.receiptType === ReceiptType.Original
-  ) {
-    throw new Error("Fungible with receipt type Original is not supported yet");
-  }
-
+  const mintMetadataId = findMintMetadataId(params.originalMintId);
+  const [mintAccountInfo, metadataAccountInfo] =
+    await connection.getMultipleAccountsInfo([
+      params.originalMintId,
+      mintMetadataId,
+    ]);
+  const mintInfo = unpackMint(params.originalMintId, mintAccountInfo ?? null);
+  const mintMetadata = metadataAccountInfo
+    ? Metadata.fromAccountInfo(metadataAccountInfo)[0]
+    : null;
   let transaction = new Transaction();
-  const stakeEntryId = await findStakeEntryIdFromMint(
-    connection,
+
+  const stakeEntryId = findStakeEntryId(
     wallet.publicKey,
     params.stakePoolId,
-    params.originalMintId
+    params.originalMintId,
+    Number(mintInfo.supply.toString()) > 1
   );
-  const stakeEntryData = await tryGetAccount(() =>
+  const stakeEntryData = await tryNull(() =>
     getStakeEntry(connection, stakeEntryId)
   );
   if (!stakeEntryData) {
@@ -381,44 +403,73 @@ export const stake = async (
     });
   }
 
-  await withStake(transaction, connection, wallet, {
-    stakePoolId: params.stakePoolId,
-    originalMintId: params.originalMintId,
-    userOriginalMintTokenAccountId: params.userOriginalMintTokenAccountId,
-    amount: params.amount,
-  });
+  if (
+    mintMetadata?.tokenStandard === TokenStandard.ProgrammableNonFungible &&
+    mintMetadata.programmableConfig?.ruleSet
+  ) {
+    transaction.add(
+      await stakePoolProgram(connection, wallet)
+        .methods.stakeProgrammable(params.amount ?? new BN(1))
+        .accountsStrict({
+          stakeEntry: stakeEntryId,
+          stakePool: params.stakePoolId,
+          originalMint: params.originalMintId,
+          systemProgram: SystemProgram.programId,
+          user: wallet.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          tokenMetadataProgram: METADATA_PROGRAM_ID,
+          userOriginalMintTokenAccount: params.userOriginalMintTokenAccountId,
+          userOriginaMintTokenRecord: findTokenRecordId(
+            params.originalMintId,
+            params.userOriginalMintTokenAccountId
+          ),
+          mintMetadata: mintMetadataId,
+          mintEdition: findMintEditionId(params.originalMintId),
+          authorizationRules: mintMetadata.programmableConfig?.ruleSet,
+          sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+          authorizationRulesProgram: TOKEN_AUTH_RULES_ID,
+        })
+        .instruction()
+    );
+  } else {
+    await withStake(transaction, connection, wallet, {
+      stakePoolId: params.stakePoolId,
+      originalMintId: params.originalMintId,
+      userOriginalMintTokenAccountId: params.userOriginalMintTokenAccountId,
+      amount: params.amount,
+    });
 
-  if (params.receiptType && params.receiptType !== ReceiptType.None) {
-    const receiptMintId =
-      params.receiptType === ReceiptType.Receipt
-        ? stakeEntryData?.parsed.stakeMint
-        : params.originalMintId;
-    if (!receiptMintId) {
-      throw new Error(
-        "Stake entry has no stake mint. Initialize stake mint first."
-      );
-    }
-    if (
-      stakeEntryData?.parsed.stakeMintClaimed ||
-      stakeEntryData?.parsed.originalMintClaimed
-    ) {
-      throw new Error("Receipt has already been claimed.");
-    }
+    if (params.receiptType && params.receiptType !== ReceiptType.None) {
+      const receiptMintId =
+        params.receiptType === ReceiptType.Receipt
+          ? stakeEntryData?.parsed.stakeMint
+          : params.originalMintId;
+      if (!receiptMintId) {
+        throw new Error(
+          "Stake entry has no stake mint. Initialize stake mint first."
+        );
+      }
+      if (
+        stakeEntryData?.parsed.stakeMintClaimed ||
+        stakeEntryData?.parsed.originalMintClaimed
+      ) {
+        throw new Error("Receipt has already been claimed.");
+      }
 
-    if (
-      !stakeEntryData?.parsed ||
-      stakeEntryData.parsed.amount.toNumber() === 0
-    ) {
-      await withClaimReceiptMint(transaction, connection, wallet, {
-        stakePoolId: params.stakePoolId,
-        stakeEntryId: stakeEntryId,
-        originalMintId: params.originalMintId,
-        receiptMintId: receiptMintId,
-        receiptType: params.receiptType,
-      });
+      if (
+        !stakeEntryData?.parsed ||
+        stakeEntryData.parsed.amount.toNumber() === 0
+      ) {
+        await withClaimReceiptMint(transaction, connection, wallet, {
+          stakePoolId: params.stakePoolId,
+          stakeEntryId: stakeEntryId,
+          originalMintId: params.originalMintId,
+          receiptMintId: receiptMintId,
+          receiptType: params.receiptType,
+        });
+      }
     }
   }
-
   return transaction;
 };
 
@@ -438,8 +489,64 @@ export const unstake = async (
     originalMintId: PublicKey;
     skipRewardMintTokenAccount?: boolean;
   }
-): Promise<Transaction> =>
-  withUnstake(new Transaction(), connection, wallet, params);
+): Promise<Transaction> => {
+  const mintMetadataId = findMintMetadataId(params.originalMintId);
+  const [mintAccountInfo, metadataAccountInfo] =
+    await connection.getMultipleAccountsInfo([
+      params.originalMintId,
+      mintMetadataId,
+    ]);
+  const mintInfo = unpackMint(params.originalMintId, mintAccountInfo ?? null);
+  const mintMetadata = metadataAccountInfo
+    ? Metadata.fromAccountInfo(metadataAccountInfo)[0]
+    : null;
+  const stakeEntryId = findStakeEntryId(
+    wallet.publicKey,
+    params.stakePoolId,
+    params.originalMintId,
+    Number(mintInfo.supply.toString()) > 1
+  );
+  const transaction = new Transaction();
+  if (
+    mintMetadata?.tokenStandard === TokenStandard.ProgrammableNonFungible &&
+    mintMetadata.programmableConfig?.ruleSet
+  ) {
+    const userOriginalMintTokenAccountId =
+      await withFindOrInitAssociatedTokenAccount(
+        transaction,
+        connection,
+        params.originalMintId,
+        wallet.publicKey,
+        wallet.publicKey
+      );
+    transaction.add(
+      await stakePoolProgram(connection, wallet)
+        .methods.unstakeProgrammable()
+        .accountsStrict({
+          stakeEntry: stakeEntryId,
+          stakePool: params.stakePoolId,
+          originalMint: params.originalMintId,
+          systemProgram: SystemProgram.programId,
+          user: wallet.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          tokenMetadataProgram: METADATA_PROGRAM_ID,
+          userOriginalMintTokenAccount: userOriginalMintTokenAccountId,
+          userOriginaMintTokenRecord: findTokenRecordId(
+            params.originalMintId,
+            userOriginalMintTokenAccountId
+          ),
+          mintMetadata: mintMetadataId,
+          mintEdition: findMintEditionId(params.originalMintId),
+          authorizationRules: mintMetadata.programmableConfig?.ruleSet,
+          sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+          authorizationRulesProgram: TOKEN_AUTH_RULES_ID,
+        })
+        .instruction()
+    );
+    return transaction;
+  }
+  return withUnstake(new Transaction(), connection, wallet, params);
+};
 
 /**
  * Convenience call to create a group entry

@@ -7,7 +7,7 @@ import { createStakePool, stake, unstake } from "../../../src";
 import { ReceiptType } from "../../../src/programs/stakePool";
 import { getStakeEntry } from "../../../src/programs/stakePool/accounts";
 import { findStakeEntryIdFromMint } from "../../../src/programs/stakePool/utils";
-import { createMasterEdition, executeTransaction } from "../../utils";
+import { createProgrammableAsset, executeTransaction } from "../../utils";
 import type { CardinalProvider } from "../../workspace";
 import { getProvider } from "../../workspace";
 
@@ -19,10 +19,8 @@ let stakePoolId: PublicKey;
 describe("Stake programmable unstake", () => {
   beforeAll(async () => {
     provider = await getProvider();
-    [originalMintTokenAccountId, originalMintId] = await createMasterEdition(
-      provider.connection,
-      provider.wallet
-    );
+    [originalMintTokenAccountId, originalMintId] =
+      await createProgrammableAsset(provider.connection, provider.wallet);
   });
 
   test("Create Pool", async () => {
@@ -111,6 +109,6 @@ describe("Stake programmable unstake", () => {
       userOriginalMintTokenAccountId
     );
     expect(Number(checkUserOriginalTokenAccount.amount)).toEqual(1);
-    expect(checkUserOriginalTokenAccount.isFrozen).toEqual(false);
+    expect(checkUserOriginalTokenAccount.isFrozen).toEqual(true);
   });
 });

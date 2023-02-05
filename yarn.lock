@@ -773,6 +773,17 @@
     "@solana/web3.js" "^1.31.0"
     bs58 "^4.0.1"
 
+"@metaplex-foundation/mpl-token-auth-rules@^1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@metaplex-foundation/mpl-token-auth-rules/-/mpl-token-auth-rules-1.1.0.tgz#1e6243775a61126ce985b0522ba7412af1667777"
+  integrity sha512-RqagEckDqxnt7tEcA6jf54dIRMfLTy5xNTi+uyTTq6WRoM39/7Bshco255909N2CZIqMPUzxzCyjO20xKp+mWA==
+  dependencies:
+    "@metaplex-foundation/beet" "^0.7.1"
+    "@metaplex-foundation/beet-solana" "^0.4.0"
+    "@metaplex-foundation/cusper" "^0.0.2"
+    "@solana/spl-token" "^0.3.6"
+    "@solana/web3.js" "^1.66.2"
+
 "@metaplex-foundation/mpl-token-metadata@^1.2.5":
   version "1.2.5"
   resolved "https://registry.yarnpkg.com/@metaplex-foundation/mpl-token-metadata/-/mpl-token-metadata-1.2.5.tgz#1a927b1c7d30cd634a1e4782022712a02f6865c2"
@@ -781,6 +792,19 @@
     "@metaplex-foundation/mpl-core" "^0.0.2"
     "@solana/spl-token" "^0.1.8"
     "@solana/web3.js" "^1.31.0"
+
+"@metaplex-foundation/mpl-token-metadata@^2.8.1":
+  version "2.8.1"
+  resolved "https://registry.yarnpkg.com/@metaplex-foundation/mpl-token-metadata/-/mpl-token-metadata-2.8.1.tgz#c4b137b7d7bfb8e7594a3cecb0a91fab05fe6e57"
+  integrity sha512-zk4neFTPaI5atCiosOHGzLX/7sLbWg4ne7zwJXVsJ0O3RYnj5ynwrWLrnvMaE+qR/6gcFy28JvxPvMexIxjbfA==
+  dependencies:
+    "@metaplex-foundation/beet" "^0.7.1"
+    "@metaplex-foundation/beet-solana" "^0.4.0"
+    "@metaplex-foundation/cusper" "^0.0.2"
+    "@solana/spl-token" "^0.3.6"
+    "@solana/web3.js" "^1.66.2"
+    bn.js "^5.2.0"
+    debug "^4.3.4"
 
 "@metaplex-foundation/rustbin@^0.3.0", "@metaplex-foundation/rustbin@^0.3.1":
   version "0.3.1"
@@ -807,6 +831,11 @@
     prettier "^2.5.1"
     snake-case "^3.0.4"
     spok "^1.4.3"
+
+"@msgpack/msgpack@^2.8.0":
+  version "2.8.0"
+  resolved "https://registry.yarnpkg.com/@msgpack/msgpack/-/msgpack-2.8.0.tgz#4210deb771ee3912964f14a15ddfb5ff877e70b9"
+  integrity sha512-h9u4u/jiIRKbq25PM+zymTyW6bhTzELvOoUd+AvYriWOAKpLGnIamaET3pnHYoI5iYphAHBI4ayx0MehR+VVPQ==
 
 "@noble/ed25519@^1.7.0":
   version "1.7.1"
@@ -3657,19 +3686,6 @@ mkdirp@^1.0.4:
   version "1.0.4"
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-1.0.4.tgz#3eb5ed62622756d79a5f0e2a221dfebad75c2f7e"
   integrity sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==
-
-"mplx-v2@npm:@metaplex-foundation/mpl-token-metadata@^2.5.1":
-  version "2.5.2"
-  resolved "https://registry.yarnpkg.com/@metaplex-foundation/mpl-token-metadata/-/mpl-token-metadata-2.5.2.tgz#ec84464e2bf65bf491abdc71c3882e5973dd9978"
-  integrity sha512-lAjQjj2gGtyLq8MOkp4tWZSC5DK9NWgPd3EoH0KQ9gMs3sKIJRik0CBaZg+JA0uLwzkiErY2Izus4vbWtRADJQ==
-  dependencies:
-    "@metaplex-foundation/beet" "^0.7.1"
-    "@metaplex-foundation/beet-solana" "^0.4.0"
-    "@metaplex-foundation/cusper" "^0.0.2"
-    "@solana/spl-token" "^0.3.6"
-    "@solana/web3.js" "^1.66.2"
-    bn.js "^5.2.0"
-    debug "^4.3.4"
 
 ms@2.0.0:
   version "2.0.0"

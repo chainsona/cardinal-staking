@@ -19,14 +19,9 @@ pub struct StakeProgrammableCtx<'info> {
     stake_pool: Box<Account<'info, StakePool>>,
 
     // stake_entry token accounts
-    #[account(mut, constraint =
-        stake_entry_original_mint_token_account.mint == stake_entry.original_mint
-        && stake_entry_original_mint_token_account.owner == stake_entry.key()
-        @ ErrorCode::InvalidStakeEntryOriginalMintTokenAccount
-    )]
-    stake_entry_original_mint_token_account: Box<Account<'info, TokenAccount>>,
     original_mint: Box<Account<'info, Mint>>,
     /// CHECK: This is not dangerous because we don't read or write from this account
+    #[account(mut)]
     user_origina_mint_token_record: UncheckedAccount<'info>,
 
     // user
@@ -40,6 +35,7 @@ pub struct StakeProgrammableCtx<'info> {
     )]
     user_original_mint_token_account: Box<Account<'info, TokenAccount>>,
     /// CHECK: This is not dangerous because we don't read or write from this account
+    #[account(mut)]
     mint_metadata: UncheckedAccount<'info>,
     /// CHECK: This is not dangerous because we don't read or write from this account
     mint_edition: UncheckedAccount<'info>,
@@ -154,7 +150,7 @@ pub fn handler(ctx: Context<StakeProgrammableCtx>, amount: u64) -> Result<()> {
             program_id: mpl_token_metadata::id(),
             accounts: vec![
                 // 0. `[signer]` Delegate
-                AccountMeta::new_readonly(stake_entry.key(), false),
+                AccountMeta::new_readonly(stake_entry.key(), true),
                 // 1. `[optional]` Token owner
                 AccountMeta::new_readonly(ctx.accounts.user.key(), false),
                 // 2. `[writable]` Token account
@@ -164,7 +160,7 @@ pub fn handler(ctx: Context<StakeProgrammableCtx>, amount: u64) -> Result<()> {
                 // 4. `[writable]` Metadata account
                 AccountMeta::new(ctx.accounts.mint_metadata.key(), false),
                 // 5. `[optional]` Edition account
-                AccountMeta::new(ctx.accounts.mint_edition.key(), false),
+                AccountMeta::new_readonly(ctx.accounts.mint_edition.key(), false),
                 // 6. `[optional, writable]` Token record account
                 AccountMeta::new(ctx.accounts.user_origina_mint_token_record.key(), false),
                 // 7. `[signer, writable]` Payer
