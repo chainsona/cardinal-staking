@@ -7,16 +7,8 @@ import {
 } from "@cardinal/common";
 import { PAYMENT_MANAGER_ADDRESS } from "@cardinal/payment-manager";
 import { getPaymentManager } from "@cardinal/payment-manager/dist/cjs/accounts";
-import {
-  getRemainingAccountsForKind,
-  TOKEN_MANAGER_ADDRESS,
-  TokenManagerKind,
-} from "@cardinal/token-manager/dist/cjs/programs/tokenManager";
-import {
-  findMintCounterId,
-  findMintManagerId,
-  findTokenManagerAddress,
-} from "@cardinal/token-manager/dist/cjs/programs/tokenManager/pda";
+import { TOKEN_MANAGER_ADDRESS } from "@cardinal/token-manager/dist/cjs/programs/tokenManager";
+import { findMintManagerId } from "@cardinal/token-manager/dist/cjs/programs/tokenManager/pda";
 import { BN } from "@project-serum/anchor";
 import type { Wallet } from "@project-serum/anchor/dist/cjs/provider";
 import { ASSOCIATED_PROGRAM_ID } from "@project-serum/anchor/dist/cjs/utils/token";
@@ -33,11 +25,7 @@ import {
 } from "@solana/web3.js";
 
 import { getPoolIdentifier, getStakeBooster, getStakeEntry } from "./accounts";
-import {
-  ReceiptType,
-  STAKE_BOOSTER_PAYMENT_MANAGER,
-  stakePoolProgram,
-} from "./constants";
+import { STAKE_BOOSTER_PAYMENT_MANAGER, stakePoolProgram } from "./constants";
 import {
   findGroupEntryId,
   findIdentifierId,
@@ -45,10 +33,7 @@ import {
   findStakeBoosterId,
   findStakePoolId,
 } from "./pda";
-import {
-  findStakeEntryIdFromMint,
-  remainingAccountsForInitStakeEntry,
-} from "./utils";
+import { remainingAccountsForInitStakeEntry } from "./utils";
 
 /**
  * Add init pool identifier instructions to a transaction
@@ -308,135 +293,6 @@ export const withInitStakeMint = async (
     .instruction();
   transaction.add(ix);
   return [transaction, params.stakeMintKeypair];
-};
-
-/**
- * Add claim receipt mint instructions to a transaction
- * @param transaction
- * @param connection
- * @param wallet
- * @param params
- * @returns Transaction
- */
-export const withClaimReceiptMint = async (
-  transaction: Transaction,
-  connection: Connection,
-  wallet: Wallet,
-  params: {
-    stakePoolId: PublicKey;
-    stakeEntryId: PublicKey;
-    originalMintId: PublicKey;
-    receiptMintId: PublicKey;
-    receiptType: ReceiptType;
-  }
-): Promise<Transaction> => {
-  const stakeEntryReceiptMintTokenAccountId = await findAta(
-    params.receiptMintId,
-    params.stakeEntryId,
-    true
-  );
-  const userReceiptMintTokenAccountId = await findAta(
-    params.receiptMintId,
-    wallet.publicKey,
-    true
-  );
-  const [tokenManagerId] = await findTokenManagerAddress(params.receiptMintId);
-  const [mintCounterId] = await findMintCounterId(params.receiptMintId);
-  const remainingAccountsForKind = await getRemainingAccountsForKind(
-    params.receiptMintId,
-    params.receiptType === ReceiptType.Original
-      ? TokenManagerKind.Edition
-      : TokenManagerKind.Managed
-  );
-
-  const tokenManagerReceiptMintTokenAccountId =
-    await withFindOrInitAssociatedTokenAccount(
-      transaction,
-      connection,
-      params.receiptMintId,
-      tokenManagerId,
-      wallet.publicKey,
-      true
-    );
-  const ix = await stakePoolProgram(connection, wallet)
-    .methods.claimReceiptMint()
-    .accounts({
-      stakeEntry: params.stakeEntryId,
-      originalMint: params.originalMintId,
-      receiptMint: params.receiptMintId,
-      stakeEntryReceiptMintTokenAccount: stakeEntryReceiptMintTokenAccountId,
-      user: wallet.publicKey,
-      userReceiptMintTokenAccount: userReceiptMintTokenAccountId,
-      tokenManagerReceiptMintTokenAccount:
-        tokenManagerReceiptMintTokenAccountId,
-      tokenManager: tokenManagerId,
-      mintCounter: mintCounterId,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      tokenManagerProgram: TOKEN_MANAGER_ADDRESS,
-      associatedTokenProgram: ASSOCIATED_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
-      rent: SYSVAR_RENT_PUBKEY,
-    })
-    .remainingAccounts(remainingAccountsForKind)
-    .instruction();
-  transaction.add(ix);
-  return transaction;
-};
-
-/**
- * Add stake instructions to a transaction
- * @param transaction
- * @param connection
- * @param wallet
- * @param params
- * @returns Transaction
- */
-export const withStake = async (
-  transaction: Transaction,
-  connection: Connection,
-  wallet: Wallet,
-  params: {
-    stakePoolId: PublicKey;
-    originalMintId: PublicKey;
-    userOriginalMintTokenAccountId: PublicKey;
-    amount?: BN;
-    stakeEntryId?: PublicKey;
-  }
-): Promise<Transaction> => {
-  const stakeEntryId =
-    params.stakeEntryId ??
-    (await findStakeEntryIdFromMint(
-      connection,
-      wallet.publicKey,
-      params.stakePoolId,
-      params.originalMintId
-    ));
-  const stakeEntryOriginalMintTokenAccountId =
-    await withFindOrInitAssociatedTokenAccount(
-      transaction,
-      connection,
-      params.originalMintId,
-      stakeEntryId,
-      wallet.publicKey,
-      true
-    );
-
-  const program = stakePoolProgram(connection, wallet);
-  const ix = await program.methods
-    .stake(params.amount || new BN(1))
-    .accounts({
-      stakeEntry: stakeEntryId,
-      stakePool: params.stakePoolId,
-      stakeEntryOriginalMintTokenAccount: stakeEntryOriginalMintTokenAccountId,
-      originalMint: params.originalMintId,
-      user: wallet.publicKey,
-      userOriginalMintTokenAccount: params.userOriginalMintTokenAccountId,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .instruction();
-  transaction.add(ix);
-
-  return transaction;
 };
 
 export const withUpdateStakePool = async (
