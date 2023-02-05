@@ -99,6 +99,7 @@ import {
 } from "./programs/stakePool/transaction";
 import {
   findStakeEntryIdFromMint,
+  remainingAccountsForInitStakeEntry,
   shouldReturnReceipt,
 } from "./programs/stakePool/utils";
 import { findTokenRecordId } from "./utils";
@@ -421,12 +422,17 @@ export const stake = async (
     amount?: BN;
   }
 ): Promise<Transaction> => {
+  /////// derive ids ///////
   const mintMetadataId = findMintMetadataId(params.originalMintId);
+
+  /////// get accounts ///////
   const [mintAccountInfo, metadataAccountInfo] =
     await connection.getMultipleAccountsInfo([
       params.originalMintId,
       mintMetadataId,
     ]);
+
+  /////// deserialize accounts ///////
   const mintInfo = unpackMint(params.originalMintId, mintAccountInfo ?? null);
   const mintMetadata = metadataAccountInfo
     ? Metadata.fromAccountInfo(metadataAccountInfo)[0]
@@ -441,20 +447,36 @@ export const stake = async (
     getStakeEntry(connection, stakeEntryId)
   );
 
+  /////// start transaction ///////
   const transaction = new Transaction();
+
+  /////// init entry ///////
   if (!stakeEntryData) {
-    await withInitStakeEntry(transaction, connection, wallet, {
-      stakePoolId: params.stakePoolId,
-      originalMintId: params.originalMintId,
-      stakeEntryId,
-    });
+    const ix = await stakePoolProgram(connection, wallet)
+      .methods.initEntry(wallet.publicKey)
+      .accounts({
+        stakeEntry: stakeEntryId,
+        stakePool: params.stakePoolId,
+        originalMint: params.originalMintId,
+        originalMintMetadata: findMintMetadataId(params.originalMintId),
+        payer: wallet.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts(
+        remainingAccountsForInitStakeEntry(
+          params.stakePoolId,
+          params.originalMintId
+        )
+      )
+      .instruction();
+    transaction.add(ix);
   }
 
   if (
     mintMetadata?.tokenStandard === TokenStandard.ProgrammableNonFungible &&
     mintMetadata.programmableConfig?.ruleSet
   ) {
-    // programmable
+    /////// programmable ///////
     transaction.add(
       await stakePoolProgram(connection, wallet)
         .methods.stakeProgrammable(params.amount ?? new BN(1))
@@ -480,7 +502,7 @@ export const stake = async (
         .instruction()
     );
   } else {
-    // non-programmable
+    /////// non-programmable ///////
     const stakeEntryOriginalMintTokenAccountId = getAssociatedTokenAddressSync(
       params.originalMintId,
       stakeEntryId,
@@ -509,7 +531,7 @@ export const stake = async (
       .instruction();
     transaction.add(ix);
 
-    // receipts
+    /////// receipts ///////
     if (params.receiptType && params.receiptType !== ReceiptType.None) {
       const receiptMintId =
         params.receiptType === ReceiptType.Receipt
@@ -528,14 +550,7 @@ export const stake = async (
         !stakeEntryData?.parsed ||
         stakeEntryData.parsed.amount.toNumber() === 0
       ) {
-        const [tokenManagerId] = await findTokenManagerAddress(receiptMintId);
-        const [mintCounterId] = await findMintCounterId(receiptMintId);
-        const remainingAccountsForKind = await getRemainingAccountsForKind(
-          receiptMintId,
-          params.receiptType === ReceiptType.Original
-            ? TokenManagerKind.Edition
-            : TokenManagerKind.Managed
-        );
+        const tokenManagerId = findTokenManagerAddress(receiptMintId);
         const tokenManagerReceiptMintTokenAccountId =
           getAssociatedTokenAddressSync(receiptMintId, tokenManagerId, true);
         transaction.add(
@@ -566,14 +581,21 @@ export const stake = async (
             tokenManagerReceiptMintTokenAccount:
               tokenManagerReceiptMintTokenAccountId,
             tokenManager: tokenManagerId,
-            mintCounter: mintCounterId,
+            mintCounter: findMintCounterId(receiptMintId),
             tokenProgram: TOKEN_PROGRAM_ID,
             tokenManagerProgram: TOKEN_MANAGER_ADDRESS,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: SYSVAR_RENT_PUBKEY,
           })
-          .remainingAccounts(remainingAccountsForKind)
+          .remainingAccounts(
+            getRemainingAccountsForKind(
+              receiptMintId,
+              params.receiptType === ReceiptType.Original
+                ? TokenManagerKind.Edition
+                : TokenManagerKind.Managed
+            )
+          )
           .instruction();
         transaction.add(ix);
       }
@@ -762,7 +784,7 @@ export const unstake = async (
           ? stakeEntry.parsed.stakeMint
           : stakeEntry.parsed.originalMint;
 
-      const [tokenManagerId] = await findTokenManagerAddress(receiptMint);
+      const tokenManagerId = findTokenManagerAddress(receiptMint);
       const tokenManagerData = await tryNull(() =>
         tokenManager.accounts.getTokenManager(connection, tokenManagerId)
       );
@@ -771,10 +793,6 @@ export const unstake = async (
         tokenManagerData &&
         shouldReturnReceipt(stakePoolData.parsed, stakeEntry.parsed)
       ) {
-        const transferAccounts = await getRemainingAccountsForKind(
-          receiptMint,
-          tokenManagerData.parsed.kind
-        );
         const ix = await stakePoolProgram(connection, wallet)
           .methods.returnReceiptMint()
           .accountsStrict({
@@ -799,7 +817,10 @@ export const unstake = async (
           })
           .remainingAccounts([
             ...(tokenManagerData.parsed.state === TokenManagerState.Claimed
-              ? transferAccounts
+              ? getRemainingAccountsForKind(
+                  receiptMint,
+                  tokenManagerData.parsed.kind
+                )
               : []),
             // assume stake entry receipt mint account is already created
             {

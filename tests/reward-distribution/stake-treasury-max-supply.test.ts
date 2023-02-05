@@ -1,5 +1,4 @@
-import { findAta } from "@cardinal/common";
-import { withWrapSol } from "@cardinal/token-manager/dist/cjs/wrappedSol";
+import { findAta, withWrapSol } from "@cardinal/common";
 import { BN } from "@project-serum/anchor";
 import { getAccount } from "@solana/spl-token";
 import type { Keypair } from "@solana/web3.js";

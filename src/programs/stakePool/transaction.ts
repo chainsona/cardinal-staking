@@ -35,32 +35,6 @@ import {
 } from "./pda";
 import { remainingAccountsForInitStakeEntry } from "./utils";
 
-/**
- * Add init pool identifier instructions to a transaction
- * @param transaction
- * @param connection
- * @param wallet
- * @returns Transaction, public key for the created pool identifier
- */
-export const withInitPoolIdentifier = async (
-  transaction: Transaction,
-  connection: Connection,
-  wallet: Wallet
-): Promise<[Transaction, PublicKey]> => {
-  const identifierId = findIdentifierId();
-  const program = stakePoolProgram(connection, wallet);
-  const ix = await program.methods
-    .initIdentifier()
-    .accounts({
-      identifier: identifierId,
-      payer: wallet.publicKey,
-      systemProgram: SystemProgram.programId,
-    })
-    .instruction();
-  transaction.add(ix);
-  return [transaction, identifierId];
-};
-
 export const withInitStakePool = async (
   transaction: Transaction,
   connection: Connection,
@@ -143,7 +117,7 @@ export const withInitStakeEntry = async (
 ): Promise<Transaction> => {
   const ix = await stakePoolProgram(connection, wallet)
     .methods.initEntry(wallet.publicKey)
-    .accounts({
+    .accountsStrict({
       stakeEntry: params.stakeEntryId,
       stakePool: params.stakePoolId,
       originalMint: params.originalMintId,
@@ -179,17 +153,14 @@ export const withAuthorizeStakeEntry = async (
     originalMintId: PublicKey;
   }
 ): Promise<Transaction> => {
-  const stakeAuthorizationId = findStakeAuthorizationId(
-    params.stakePoolId,
-    params.originalMintId
-  );
-
-  const program = stakePoolProgram(connection, wallet);
-  const ix = await program.methods
-    .authorizeMint(params.originalMintId)
+  const ix = await stakePoolProgram(connection, wallet)
+    .methods.authorizeMint(params.originalMintId)
     .accounts({
       stakePool: params.stakePoolId,
-      stakeAuthorizationRecord: stakeAuthorizationId,
+      stakeAuthorizationRecord: findStakeAuthorizationId(
+        params.stakePoolId,
+        params.originalMintId
+      ),
       payer: wallet.publicKey,
       systemProgram: SystemProgram.programId,
     })
@@ -254,9 +225,6 @@ export const withInitStakeMint = async (
     symbol: string;
   }
 ): Promise<[Transaction, Keypair]> => {
-  const [mintManagerId] = await findMintManagerId(
-    params.stakeMintKeypair.publicKey
-  );
   const originalMintMetadataId = findMintMetadataId(params.originalMintId);
   const stakeMintMetadataId = findMintMetadataId(
     params.stakeMintKeypair.publicKey
@@ -281,7 +249,7 @@ export const withInitStakeMint = async (
       stakeMint: params.stakeMintKeypair.publicKey,
       stakeMintMetadata: stakeMintMetadataId,
       stakeEntryStakeMintTokenAccount: stakeEntryStakeMintTokenAccountId,
-      mintManager: mintManagerId,
+      mintManager: findMintManagerId(params.stakeMintKeypair.publicKey),
       payer: wallet.publicKey,
       rent: SYSVAR_RENT_PUBKEY,
       tokenProgram: TOKEN_PROGRAM_ID,
