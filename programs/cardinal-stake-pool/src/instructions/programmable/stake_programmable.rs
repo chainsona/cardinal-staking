@@ -14,15 +14,10 @@ use {
 pub struct StakeProgrammableCtx<'info> {
     #[account(mut, seeds = [STAKE_ENTRY_PREFIX.as_bytes(), stake_entry.pool.as_ref(), stake_entry.original_mint.as_ref(), get_stake_seed(original_mint.supply, user.key()).as_ref()], bump=stake_entry.bump)]
     stake_entry: Box<Account<'info, StakeEntry>>,
-
     #[account(mut, constraint = stake_entry.pool == stake_pool.key() @ ErrorCode::InvalidStakePool)]
     stake_pool: Box<Account<'info, StakePool>>,
 
-    // stake_entry token accounts
     original_mint: Box<Account<'info, Mint>>,
-    /// CHECK: This is not dangerous because we don't read or write from this account
-    #[account(mut)]
-    user_origina_mint_token_record: UncheckedAccount<'info>,
 
     // user
     #[account(mut)]
@@ -34,6 +29,10 @@ pub struct StakeProgrammableCtx<'info> {
         @ ErrorCode::InvalidUserOriginalMintTokenAccount
     )]
     user_original_mint_token_account: Box<Account<'info, TokenAccount>>,
+    /// CHECK: This is not dangerous because we don't read or write from this account
+    #[account(mut)]
+    user_original_mint_token_record: UncheckedAccount<'info>,
+
     /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(mut)]
     mint_metadata: UncheckedAccount<'info>,
@@ -102,7 +101,7 @@ pub fn handler(ctx: Context<StakeProgrammableCtx>, amount: u64) -> Result<()> {
                 // 3. `[optional]` Master Edition account
                 AccountMeta::new_readonly(ctx.accounts.mint_edition.key(), false),
                 // 4. `[]` Token record
-                AccountMeta::new(ctx.accounts.user_origina_mint_token_record.key(), false),
+                AccountMeta::new(ctx.accounts.user_original_mint_token_record.key(), false),
                 // 5. `[]` Mint account
                 AccountMeta::new_readonly(ctx.accounts.original_mint.key(), false),
                 // 6. `[optional, writable]` Token account
@@ -133,7 +132,7 @@ pub fn handler(ctx: Context<StakeProgrammableCtx>, amount: u64) -> Result<()> {
             stake_entry.to_account_info(),
             ctx.accounts.mint_metadata.to_account_info(),
             ctx.accounts.mint_edition.to_account_info(),
-            ctx.accounts.user_origina_mint_token_record.to_account_info(),
+            ctx.accounts.user_original_mint_token_record.to_account_info(),
             ctx.accounts.original_mint.to_account_info(),
             ctx.accounts.user_original_mint_token_account.to_account_info(),
             ctx.accounts.user.to_account_info(),
@@ -162,7 +161,7 @@ pub fn handler(ctx: Context<StakeProgrammableCtx>, amount: u64) -> Result<()> {
                 // 5. `[optional]` Edition account
                 AccountMeta::new_readonly(ctx.accounts.mint_edition.key(), false),
                 // 6. `[optional, writable]` Token record account
-                AccountMeta::new(ctx.accounts.user_origina_mint_token_record.key(), false),
+                AccountMeta::new(ctx.accounts.user_original_mint_token_record.key(), false),
                 // 7. `[signer, writable]` Payer
                 AccountMeta::new(ctx.accounts.user.key(), true),
                 // 8. `[]` System Program
@@ -185,7 +184,7 @@ pub fn handler(ctx: Context<StakeProgrammableCtx>, amount: u64) -> Result<()> {
             ctx.accounts.original_mint.to_account_info(),
             ctx.accounts.mint_metadata.to_account_info(),
             ctx.accounts.mint_edition.to_account_info(),
-            ctx.accounts.user_origina_mint_token_record.to_account_info(),
+            ctx.accounts.user_original_mint_token_record.to_account_info(),
             ctx.accounts.system_program.to_account_info(),
             ctx.accounts.sysvar_instructions.to_account_info(),
             ctx.accounts.token_program.to_account_info(),

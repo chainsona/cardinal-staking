@@ -694,17 +694,17 @@ export type CardinalStakePool = {
           isSigner: false;
         },
         {
-          name: "userOriginaMintTokenRecord";
-          isMut: true;
-          isSigner: false;
-        },
-        {
           name: "user";
           isMut: true;
           isSigner: true;
         },
         {
           name: "userOriginalMintTokenAccount";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "userOriginalMintTokenRecord";
           isMut: true;
           isSigner: false;
         },
@@ -775,17 +775,17 @@ export type CardinalStakePool = {
           isSigner: false;
         },
         {
-          name: "userOriginaMintTokenRecord";
-          isMut: true;
-          isSigner: false;
-        },
-        {
           name: "user";
           isMut: true;
           isSigner: true;
         },
         {
           name: "userOriginalMintTokenAccount";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "userOriginalMintTokenRecord";
           isMut: true;
           isSigner: false;
         },
@@ -2572,17 +2572,17 @@ export const IDL: CardinalStakePool = {
           isSigner: false,
         },
         {
-          name: "userOriginaMintTokenRecord",
-          isMut: true,
-          isSigner: false,
-        },
-        {
           name: "user",
           isMut: true,
           isSigner: true,
         },
         {
           name: "userOriginalMintTokenAccount",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "userOriginalMintTokenRecord",
           isMut: true,
           isSigner: false,
         },
@@ -2653,17 +2653,17 @@ export const IDL: CardinalStakePool = {
           isSigner: false,
         },
         {
-          name: "userOriginaMintTokenRecord",
-          isMut: true,
-          isSigner: false,
-        },
-        {
           name: "user",
           isMut: true,
           isSigner: true,
         },
         {
           name: "userOriginalMintTokenAccount",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "userOriginalMintTokenRecord",
           isMut: true,
           isSigner: false,
         },

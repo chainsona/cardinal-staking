@@ -694,17 +694,17 @@
           "isSigner": false
         },
         {
-          "name": "userOriginaMintTokenRecord",
-          "isMut": true,
-          "isSigner": false
-        },
-        {
           "name": "user",
           "isMut": true,
           "isSigner": true
         },
         {
           "name": "userOriginalMintTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userOriginalMintTokenRecord",
           "isMut": true,
           "isSigner": false
         },
@@ -775,17 +775,17 @@
           "isSigner": false
         },
         {
-          "name": "userOriginaMintTokenRecord",
-          "isMut": true,
-          "isSigner": false
-        },
-        {
           "name": "user",
           "isMut": true,
           "isSigner": true
         },
         {
           "name": "userOriginalMintTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userOriginalMintTokenRecord",
           "isMut": true,
           "isSigner": false
         },
