@@ -38,12 +38,10 @@ pub fn handler(ctx: Context<UnstakeCtx>) -> Result<()> {
     let stake_pool = &mut ctx.accounts.stake_pool;
     let stake_entry = &mut ctx.accounts.stake_entry;
 
+    let seed = get_stake_seed(ctx.accounts.original_mint.supply, ctx.accounts.user.key());
     let original_mint = stake_entry.original_mint;
-    let user = ctx.accounts.user.key();
-    let stake_pool_key = stake_pool.key();
-    let seed = get_stake_seed(ctx.accounts.original_mint.supply, user);
-
-    let stake_entry_seed = [STAKE_ENTRY_PREFIX.as_bytes(), stake_pool_key.as_ref(), original_mint.as_ref(), seed.as_ref(), &[stake_entry.bump]];
+    let stake_pool_id = stake_pool.key();
+    let stake_entry_seed = [STAKE_ENTRY_PREFIX.as_bytes(), stake_pool_id.as_ref(), original_mint.as_ref(), seed.as_ref(), &[stake_entry.bump]];
     let stake_entry_signer = &[&stake_entry_seed[..]];
 
     if stake_entry.grouped == Some(true) {
@@ -79,16 +77,6 @@ pub fn handler(ctx: Context<UnstakeCtx>) -> Result<()> {
         }
     }
 
-    // give back original mint to user
-    let cpi_accounts = token::Transfer {
-        from: ctx.accounts.stake_entry_original_mint_token_account.to_account_info(),
-        to: ctx.accounts.user_original_mint_token_account.to_account_info(),
-        authority: stake_entry.to_account_info(),
-    };
-    let cpi_program = ctx.accounts.token_program.to_account_info();
-    let cpi_context = CpiContext::new(cpi_program, cpi_accounts).with_signer(stake_entry_signer);
-    token::transfer(cpi_context, stake_entry.amount)?;
-
     stake_entry.total_stake_seconds = stake_entry.total_stake_seconds.saturating_add(
         (u128::try_from(stake_entry.cooldown_start_seconds.unwrap_or(Clock::get().unwrap().unix_timestamp))
             .unwrap()
@@ -105,5 +93,15 @@ pub fn handler(ctx: Context<UnstakeCtx>) -> Result<()> {
     stake_pool.total_staked = stake_pool.total_staked.checked_sub(1).expect("Sub error");
     stake_entry.kind = StakeEntryKind::Permissionless as u8;
     stake_entry_fill_zeros(stake_entry)?;
+
+    // give back original mint to user
+    let cpi_accounts = token::Transfer {
+        from: ctx.accounts.stake_entry_original_mint_token_account.to_account_info(),
+        to: ctx.accounts.user_original_mint_token_account.to_account_info(),
+        authority: stake_entry.to_account_info(),
+    };
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+    let cpi_context = CpiContext::new(cpi_program, cpi_accounts).with_signer(stake_entry_signer);
+    token::transfer(cpi_context, stake_entry.amount)?;
     Ok(())
 }

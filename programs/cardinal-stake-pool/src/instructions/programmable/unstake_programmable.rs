@@ -11,7 +11,7 @@ use {
 };
 
 #[derive(Accounts)]
-pub struct StakeProgrammableCtx<'info> {
+pub struct UnstakeProgrammableCtx<'info> {
     #[account(mut, seeds = [STAKE_ENTRY_PREFIX.as_bytes(), stake_entry.pool.as_ref(), stake_entry.original_mint.as_ref(), get_stake_seed(original_mint.supply, user.key()).as_ref()], bump=stake_entry.bump)]
     stake_entry: Box<Account<'info, StakeEntry>>,
 
@@ -57,41 +57,65 @@ pub struct StakeProgrammableCtx<'info> {
     system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<StakeProgrammableCtx>, amount: u64) -> Result<()> {
+pub fn handler(ctx: Context<UnstakeProgrammableCtx>) -> Result<()> {
     let stake_pool = &mut ctx.accounts.stake_pool;
     let stake_entry = &mut ctx.accounts.stake_entry;
 
     let seed = get_stake_seed(ctx.accounts.original_mint.supply, ctx.accounts.user.key());
     let original_mint = stake_entry.original_mint;
-    let stake_pool_id = stake_entry.pool;
+    let stake_pool_id = stake_pool.key();
     let stake_entry_seed = [STAKE_ENTRY_PREFIX.as_bytes(), stake_pool_id.as_ref(), original_mint.as_ref(), seed.as_ref(), &[stake_entry.bump]];
     let stake_entry_signer = &[&stake_entry_seed[..]];
 
-    if stake_pool.end_date.is_some() && Clock::get().unwrap().unix_timestamp > stake_pool.end_date.unwrap() {
-        return Err(error!(ErrorCode::StakePoolHasEnded));
+    if stake_entry.grouped == Some(true) {
+        return Err(error!(ErrorCode::GroupedStakeEntry));
     }
 
-    if stake_entry.amount != 0 {
-        stake_entry.total_stake_seconds = stake_entry.total_stake_seconds.saturating_add(
-            (u128::try_from(stake_entry.cooldown_start_seconds.unwrap_or(Clock::get().unwrap().unix_timestamp))
-                .unwrap()
-                .saturating_sub(u128::try_from(stake_entry.last_updated_at.unwrap_or(stake_entry.last_staked_at)).unwrap()))
-            .checked_mul(u128::try_from(stake_entry.amount).unwrap())
-            .unwrap(),
-        );
-        stake_entry.cooldown_start_seconds = None;
+    if stake_pool.min_stake_seconds.is_some()
+        && stake_pool.min_stake_seconds.unwrap() > 0
+        && ((Clock::get().unwrap().unix_timestamp - stake_entry.last_staked_at) as u32) < stake_pool.min_stake_seconds.unwrap()
+    {
+        return Err(error!(ErrorCode::MinStakeSecondsNotSatisfied));
     }
 
-    if stake_pool.reset_on_stake && stake_entry.amount == 0 {
-        stake_entry.total_stake_seconds = 0;
+    if stake_pool.cooldown_seconds.is_some() && stake_pool.cooldown_seconds.unwrap() > 0 {
+        if stake_entry.cooldown_start_seconds.is_none() {
+            stake_entry.cooldown_start_seconds = Some(Clock::get().unwrap().unix_timestamp);
+            return Ok(());
+        } else if stake_entry.cooldown_start_seconds.is_some() && ((Clock::get().unwrap().unix_timestamp - stake_entry.cooldown_start_seconds.unwrap()) as u32) < stake_pool.cooldown_seconds.unwrap() {
+            return Err(error!(ErrorCode::CooldownSecondRemaining));
+        }
     }
 
-    // update stake entry
-    stake_entry.last_staked_at = Clock::get().unwrap().unix_timestamp;
+    // If receipt has been minted, ensure it is back in the stake_entry
+    if stake_entry.stake_mint.is_some() {
+        let remaining_accs = &mut ctx.remaining_accounts.iter();
+        let stake_entry_receipt_mint_token_account_info = next_account_info(remaining_accs)?;
+        let stake_entry_receipt_mint_token_account = Account::<TokenAccount>::try_from(stake_entry_receipt_mint_token_account_info)?;
+        if stake_entry_receipt_mint_token_account.mint != stake_entry.stake_mint.unwrap()
+            || stake_entry_receipt_mint_token_account.owner != stake_entry.key()
+            || stake_entry_receipt_mint_token_account.amount == 0
+        {
+            return Err(error!(ErrorCode::InvalidStakeEntryStakeTokenAccount));
+        }
+    }
+
+    stake_entry.total_stake_seconds = stake_entry.total_stake_seconds.saturating_add(
+        (u128::try_from(stake_entry.cooldown_start_seconds.unwrap_or(Clock::get().unwrap().unix_timestamp))
+            .unwrap()
+            .saturating_sub(u128::try_from(stake_entry.last_updated_at.unwrap_or(stake_entry.last_staked_at)).unwrap()))
+        .checked_mul(u128::try_from(stake_entry.amount).unwrap())
+        .unwrap(),
+    );
     stake_entry.last_updated_at = Some(Clock::get().unwrap().unix_timestamp);
-    stake_entry.last_staker = ctx.accounts.user.key();
-    stake_entry.amount = stake_entry.amount.checked_add(amount).unwrap();
-    stake_pool.total_staked = stake_pool.total_staked.checked_add(1).expect("Add error");
+    stake_entry.last_staker = Pubkey::default();
+    stake_entry.original_mint_claimed = false;
+    stake_entry.stake_mint_claimed = false;
+    stake_entry.amount = 0;
+    stake_entry.cooldown_start_seconds = None;
+    stake_pool.total_staked = stake_pool.total_staked.checked_sub(1).expect("Sub error");
+    stake_entry.kind = StakeEntryKind::Permissionless as u8;
+    stake_entry_fill_zeros(stake_entry)?;
 
     invoke(
         &Instruction {
