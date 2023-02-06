@@ -32,11 +32,12 @@ import type { Wallet } from "@project-serum/anchor/dist/cjs/provider";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
+  getAccount,
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
   unpackMint,
 } from "@solana/spl-token";
-import type { Connection, PublicKey } from "@solana/web3.js";
+import type { Connection, PublicKey, Signer } from "@solana/web3.js";
 import {
   Keypair,
   SystemProgram,
@@ -470,6 +471,55 @@ export const claimRewards = async (
   return txs;
 };
 
+export const claimRewardsAll = async (
+  connection: Connection,
+  wallet: Wallet,
+  params: {
+    stakePoolId: PublicKey;
+    stakeEntryIds: PublicKey[];
+    lastStaker?: PublicKey;
+    payer?: PublicKey;
+  }
+): Promise<{ tx: Transaction }[][]> => {
+  /////// get accounts ///////
+  const rewardDistributorId = findRewardDistributorId(params.stakePoolId);
+  const rewardDistributorData = await getRewardDistributor(
+    connection,
+    rewardDistributorId
+  );
+  const rewardMintId = rewardDistributorData.parsed.rewardMint;
+  const userRewardTokenAccountId = getAssociatedTokenAddressSync(
+    rewardMintId,
+    wallet.publicKey,
+    true
+  );
+  const rewardTokenAccount = await tryNull(
+    getAccount(connection, userRewardTokenAccountId)
+  );
+  const txs = await claimRewards(connection, wallet, {
+    stakePoolId: params.stakePoolId,
+    stakeEntryIds: params.stakeEntryIds,
+    lastStaker: params.lastStaker,
+    payer: params.payer,
+  });
+  return !rewardTokenAccount
+    ? [
+        txs.slice(0, 1).map((tx) => {
+          tx.add(
+            createAssociatedTokenAccountIdempotentInstruction(
+              wallet.publicKey,
+              userRewardTokenAccountId,
+              wallet.publicKey,
+              rewardMintId
+            )
+          );
+          return { tx };
+        }),
+        txs.slice(1).map((tx) => ({ tx })),
+      ]
+    : [txs.map((tx) => ({ tx }))];
+};
+
 export const stake = async (
   connection: Connection,
   wallet: Wallet,
@@ -482,7 +532,7 @@ export const stake = async (
     receiptType?: ReceiptType;
   }
 ): Promise<Transaction> => {
-  const txs = await stakeAll(connection, wallet, {
+  const txSeq = await stakeAll(connection, wallet, {
     stakePoolId: params.stakePoolId,
     mintInfos: [
       {
@@ -495,9 +545,11 @@ export const stake = async (
       },
     ],
   });
+  const txs = txSeq[0];
+  if (!txs) throw "Failed to unstake";
   const tx = txs[0];
   if (!tx) throw "Failed to unstake";
-  return tx;
+  return tx.tx;
 };
 
 /**
@@ -526,40 +578,104 @@ export const stakeAll = async (
       receiptType?: ReceiptType;
     }[];
   }
-): Promise<Transaction[]> => {
+): Promise<{ tx: Transaction; signers?: Signer[] }[][]> => {
   /////// derive ids ///////
   const mintMetadataIds = params.mintInfos.map(({ mintId }) =>
     findMintMetadataId(mintId)
   );
-  const stakeEntryIds = params.mintInfos.map(({ mintId, fungible }) =>
-    findStakeEntryId(
+  const mintInfos = params.mintInfos.map(({ mintId, fungible, ...rest }) => ({
+    ...rest,
+    mintId,
+    fungible,
+    stakeEntryId: findStakeEntryId(
       wallet.publicKey,
       params.stakePoolId,
       mintId,
       fungible ?? false
-    )
-  );
+    ),
+  }));
   /////// get accounts ///////
   const accountData = await fetchAccountDataById(connection, [
-    ...stakeEntryIds,
+    params.stakePoolId,
+    ...mintInfos.map(({ stakeEntryId }) => stakeEntryId),
     ...mintMetadataIds,
   ]);
 
-  const txs: Transaction[] = [];
-  for (let i = 0; i < params.mintInfos.length; i++) {
+  /////// preTxs ///////
+  const preTxs: { tx: Transaction; signers: Signer[] }[] = [];
+  const mintInfosWithReceipts = mintInfos.filter(
+    (i) => i.receiptType === ReceiptType.Receipt
+  );
+  if (mintInfosWithReceipts.length > 0) {
+    for (let i = 0; i < mintInfosWithReceipts.length; i++) {
+      const { mintId, stakeEntryId } = mintInfosWithReceipts[i]!;
+      const transaction = new Transaction();
+      const stakeEntryInfo = accountData[stakeEntryId.toString()] ?? null;
+      const stakeEntryData = stakeEntryInfo
+        ? tryDecodeIdlAccount<"stakeEntry", CardinalStakePool>(
+            stakeEntryInfo,
+            "stakeEntry",
+            STAKE_POOL_IDL
+          )
+        : null;
+
+      const stakePoolInfo = accountData[params.stakePoolId.toString()] ?? null;
+      if (!stakePoolInfo) throw "Stake pool not found";
+      const stakePoolData = decodeIdlAccount<"stakePool", CardinalStakePool>(
+        stakePoolInfo,
+        "stakePool",
+        STAKE_POOL_IDL
+      );
+      if (!stakeEntryInfo) {
+        const ix = await stakePoolProgram(connection, wallet)
+          .methods.initEntry(wallet.publicKey)
+          .accountsStrict({
+            stakeEntry: stakeEntryId,
+            stakePool: params.stakePoolId,
+            originalMint: mintId,
+            originalMintMetadata: findMintMetadataId(mintId),
+            payer: wallet.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .remainingAccounts(
+            remainingAccountsForInitStakeEntry(params.stakePoolId, mintId)
+          )
+          .instruction();
+        transaction.add(ix);
+      }
+      let stakeMintKeypair: Keypair | undefined;
+      if (!stakeEntryData?.parsed?.stakeMint) {
+        stakeMintKeypair = Keypair.generate();
+        await withInitStakeMint(transaction, connection, wallet, {
+          stakePoolId: params.stakePoolId,
+          stakeEntryId: stakeEntryId,
+          originalMintId: mintId,
+          stakeMintKeypair,
+          name: `POOl${stakePoolData.parsed.identifier.toString()} RECEIPT`,
+          symbol: `POOl${stakePoolData.parsed.identifier.toString()}`,
+        });
+        if (transaction.instructions.length > 0) {
+          preTxs.push({ tx: transaction, signers: [stakeMintKeypair] });
+        }
+      }
+    }
+  }
+
+  const txs: { tx: Transaction }[] = [];
+  for (let i = 0; i < mintInfos.length; i++) {
     const {
       mintId: originalMintId,
       tokenAccountId: userOriginalMintTokenAccountId,
       amount,
       receiptType,
-    } = params.mintInfos[i]!;
+      stakeEntryId,
+    } = mintInfos[i]!;
     const mintMetadataId = findMintMetadataId(originalMintId);
     /////// deserialize accounts ///////
     const metadataAccountInfo = accountData[mintMetadataId.toString()] ?? null;
     const mintMetadata = metadataAccountInfo
       ? Metadata.deserialize(metadataAccountInfo.data)[0]
       : null;
-    const stakeEntryId = stakeEntryIds[i]!;
     const stakeEntryInfo = accountData[stakeEntryId.toString()] ?? null;
     const stakeEntryData = stakeEntryInfo
       ? tryDecodeIdlAccount<"stakeEntry", CardinalStakePool>(
@@ -716,9 +832,9 @@ export const stakeAll = async (
         }
       }
     }
-    txs.push(transaction);
+    txs.push({ tx: transaction });
   }
-  return txs;
+  return preTxs.length > 0 ? [preTxs, txs] : [txs];
 };
 
 export const unstake = async (
@@ -729,13 +845,15 @@ export const unstake = async (
     originalMintId: PublicKey;
   }
 ): Promise<Transaction> => {
-  const txs = await unstakeAll(connection, wallet, {
+  const txSeq = await unstakeAll(connection, wallet, {
     stakePoolId: params.stakePoolId,
     mintInfos: [{ mintId: params.originalMintId }],
   });
+  const txs = txSeq[0];
+  if (!txs) throw "Failed to unstake";
   const tx = txs[0];
   if (!tx) throw "Failed to unstake";
-  return tx;
+  return tx.tx;
 };
 
 /**
@@ -753,7 +871,7 @@ export const unstakeAll = async (
     stakePoolId: PublicKey;
     mintInfos: { mintId: PublicKey }[];
   }
-): Promise<Transaction[]> => {
+): Promise<{ tx: Transaction; signers?: Signer[] }[][]> => {
   /////// derive ids ///////
   const mintMetadataIds = params.mintInfos.map(({ mintId }) =>
     findMintMetadataId(mintId)
@@ -777,7 +895,33 @@ export const unstakeAll = async (
       )
     : null;
 
-  const txs: Transaction[] = [];
+  /////// preTxs ///////
+  const rewardMintId = rewardDistributorData?.parsed?.rewardMint;
+  const userRewardTokenAccountId = rewardMintId
+    ? getAssociatedTokenAddressSync(rewardMintId, wallet.publicKey, true)
+    : null;
+  const preTxs: { tx: Transaction }[] = [];
+  if (userRewardTokenAccountId && rewardMintId) {
+    const rewardTokenAccount = await tryNull(
+      getAccount(connection, userRewardTokenAccountId)
+    );
+    if (rewardTokenAccount) {
+      const tx = new Transaction();
+      tx.add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey,
+          userRewardTokenAccountId,
+          wallet.publicKey,
+          rewardMintId
+        )
+      );
+      preTxs.push({
+        tx,
+      });
+    }
+  }
+
+  const txs: { tx: Transaction }[] = [];
   for (const { mintId: originalMintId } of params.mintInfos) {
     /////// deserialize accounts ///////
     const mintInfo = unpackMint(
@@ -820,7 +964,7 @@ export const unstakeAll = async (
       )
     );
 
-    if (rewardDistributorData?.parsed) {
+    if (rewardDistributorData?.parsed && userRewardTokenAccountId) {
       /////// update total stake seconds ///////
       const updateIx = await stakePoolProgram(connection, wallet)
         .methods.updateTotalStakeSeconds()
@@ -839,11 +983,7 @@ export const unstakeAll = async (
       const rewardEntry = await tryGetAccount(() =>
         getRewardEntry(connection, rewardEntryId)
       );
-      const userRewardMintTokenAccount = getAssociatedTokenAddressSync(
-        rewardDistributorData.parsed.rewardMint,
-        wallet.publicKey,
-        true
-      );
+
       if (!rewardEntry) {
         const ix = await rewardDistributorProgram(connection, wallet)
           .methods.initRewardEntry()
@@ -865,7 +1005,7 @@ export const unstakeAll = async (
           stakeEntry: stakeEntryId,
           stakePool: params.stakePoolId,
           rewardMint: rewardDistributorData.parsed.rewardMint,
-          userRewardMintTokenAccount: userRewardMintTokenAccount,
+          userRewardMintTokenAccount: userRewardTokenAccountId,
           rewardManager: REWARD_MANAGER,
           user: wallet.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -1013,9 +1153,9 @@ export const unstakeAll = async (
         .instruction();
       tx.add(ix);
     }
-    txs.push(tx);
+    txs.push({ tx });
   }
-  return txs;
+  return preTxs.length > 0 ? [preTxs, txs] : [txs];
 };
 
 /**

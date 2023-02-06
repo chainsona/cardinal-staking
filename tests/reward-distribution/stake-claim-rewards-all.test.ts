@@ -1,6 +1,5 @@
 import {
   createMint,
-  executeTransactions,
   executeTransactionSequence,
   newAccountWithLamports,
   tryNull,
@@ -15,7 +14,12 @@ import {
 } from "@solana/spl-token";
 import { PublicKey, Transaction } from "@solana/web3.js";
 
-import { claimRewards, createStakePool, stakeAll, unstakeAll } from "../../src";
+import {
+  claimRewardsAll,
+  createStakePool,
+  stakeAll,
+  unstakeAll,
+} from "../../src";
 import { getRewardDistributor } from "../../src/programs/rewardDistributor/accounts";
 import { findRewardDistributorId } from "../../src/programs/rewardDistributor/pda";
 import { withInitRewardDistributor } from "../../src/programs/rewardDistributor/transaction";
@@ -148,7 +152,7 @@ describe("Stake unstake", () => {
         receiptType: ReceiptType.Original,
       })),
     });
-    await executeTransactions(provider.connection, txs, provider.wallet);
+    await executeTransactionSequence(provider.connection, txs, provider.wallet);
 
     for (const originalMintId of originalMintIds) {
       const stakeEntryData = await getStakeEntry(
@@ -202,31 +206,27 @@ describe("Stake unstake", () => {
           )
       )
     );
-    const txs = await claimRewards(provider.connection, provider.wallet, {
+    const txs = await claimRewardsAll(provider.connection, provider.wallet, {
       stakePoolId: stakePoolId,
       stakeEntryIds,
     });
-    const txSequence = !useRewardTokenAccountBefore
-      ? [
-          txs.slice(0, 1).map((tx) => {
-            tx.add(
-              createAssociatedTokenAccountIdempotentInstruction(
-                provider.wallet.publicKey,
-                userRewardTokenAccountId,
-                provider.wallet.publicKey,
-                rewardMintId
-              )
-            );
-            return { tx };
-          }),
-          txs.slice(1).map((tx) => ({ tx })),
-        ]
-      : [txs.map((tx) => ({ tx }))];
-    await executeTransactionSequence(
-      provider.connection,
-      txSequence,
-      provider.wallet
-    );
+    // const txSequence = !useRewardTokenAccountBefore
+    //   ? [
+    //       txs.slice(0, 1).map((tx) => {
+    //         tx.add(
+    //           createAssociatedTokenAccountIdempotentInstruction(
+    //             provider.wallet.publicKey,
+    //             userRewardTokenAccountId,
+    //             provider.wallet.publicKey,
+    //             rewardMintId
+    //           )
+    //         );
+    //         return { tx };
+    //       }),
+    //       txs.slice(1).map((tx) => ({ tx })),
+    //     ]
+    //   : [txs.map((tx) => ({ tx }))];
+    await executeTransactionSequence(provider.connection, txs, provider.wallet);
 
     for (const originalMintId of originalMintIds) {
       const stakeEntryData = await getStakeEntry(
@@ -278,27 +278,23 @@ describe("Stake unstake", () => {
       stakePoolId: stakePoolId,
       mintInfos: originalMintIds.map((mintId) => ({ mintId })),
     });
-    const txSequence = !useRewardTokenAccountBefore
-      ? [
-          txs.slice(0, 1).map((tx) => {
-            tx.add(
-              createAssociatedTokenAccountIdempotentInstruction(
-                provider.wallet.publicKey,
-                userRewardTokenAccountId,
-                provider.wallet.publicKey,
-                rewardMintId
-              )
-            );
-            return { tx };
-          }),
-          txs.slice(1).map((tx) => ({ tx })),
-        ]
-      : [txs.map((tx) => ({ tx }))];
-    await executeTransactionSequence(
-      provider.connection,
-      txSequence,
-      provider.wallet
-    );
+    // const txSequence = !useRewardTokenAccountBefore
+    //   ? [
+    //       txs.slice(0, 1).map((tx) => {
+    //         tx.add(
+    //           createAssociatedTokenAccountIdempotentInstruction(
+    //             provider.wallet.publicKey,
+    //             userRewardTokenAccountId,
+    //             provider.wallet.publicKey,
+    //             rewardMintId
+    //           )
+    //         );
+    //         return { tx };
+    //       }),
+    //       txs.slice(1).map((tx) => ({ tx })),
+    //     ]
+    //   : [txs.map((tx) => ({ tx }))];
+    await executeTransactionSequence(provider.connection, txs, provider.wallet);
     for (const originalMintId of originalMintIds) {
       const stakeEntryData = await getStakeEntry(
         provider.connection,

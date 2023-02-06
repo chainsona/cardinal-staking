@@ -1,4 +1,4 @@
-import { executeTransactions } from "@cardinal/common";
+import { executeTransactionSequence } from "@cardinal/common";
 import { beforeAll, expect, test } from "@jest/globals";
 import { getAccount, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import type { Transaction } from "@solana/web3.js";
@@ -61,7 +61,7 @@ describe("Stake unstake", () => {
         receiptType: ReceiptType.Original,
       })),
     });
-    await executeTransactions(provider.connection, txs, provider.wallet);
+    await executeTransactionSequence(provider.connection, txs, provider.wallet);
 
     for (const originalMintId of originalMintIds) {
       const stakeEntryData = await getStakeEntry(
@@ -99,7 +99,7 @@ describe("Stake unstake", () => {
       stakePoolId: stakePoolId,
       mintInfos: originalMintIds.map((mintId) => ({ mintId })),
     });
-    await executeTransactions(provider.connection, txs, provider.wallet);
+    await executeTransactionSequence(provider.connection, txs, provider.wallet);
     for (const originalMintId of originalMintIds) {
       const stakeEntryData = await getStakeEntry(
         provider.connection,
