@@ -1,4 +1,4 @@
-import { findAta, withWrapSol } from "@cardinal/common";
+import { executeTransactions, findAta, withWrapSol } from "@cardinal/common";
 import { BN } from "@project-serum/anchor";
 import { getAccount } from "@solana/spl-token";
 import type { Keypair } from "@solana/web3.js";
@@ -204,15 +204,19 @@ describe("Stake and claim rewards from treasury", () => {
       beforeAmount = 0;
     }
 
-    const transaction = await claimRewards(
+    const transactions = await claimRewards(
       provider.connection,
       provider.wallet,
       {
         stakePoolId: stakePoolId,
-        stakeEntryId: stakeEntryId,
+        stakeEntryIds: [stakeEntryId],
       }
     );
-    await executeTransaction(provider.connection, transaction, provider.wallet);
+    await executeTransactions(
+      provider.connection,
+      transactions,
+      provider.wallet
+    );
 
     const afterCheckUserRewardMintTokenAccountId = await getAccount(
       provider.connection,

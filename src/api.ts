@@ -2,6 +2,7 @@ import {
   decodeIdlAccount,
   findMintEditionId,
   findMintMetadataId,
+  getBatchedMultipleAccounts,
   METADATA_PROGRAM_ID,
   tryDecodeIdlAccount,
   tryGetAccount,
@@ -64,13 +65,15 @@ import {
   REWARD_MANAGER,
   rewardDistributorProgram,
 } from "./programs/rewardDistributor";
-import { getRewardEntry } from "./programs/rewardDistributor/accounts";
+import {
+  getRewardDistributor,
+  getRewardEntry,
+} from "./programs/rewardDistributor/accounts";
 import {
   findRewardDistributorId,
   findRewardEntryId,
 } from "./programs/rewardDistributor/pda";
 import {
-  withClaimRewards,
   withInitRewardDistributor,
   withInitRewardEntry,
   withUpdateRewardEntry,
@@ -374,27 +377,99 @@ export const claimRewards = async (
   wallet: Wallet,
   params: {
     stakePoolId: PublicKey;
-    stakeEntryId: PublicKey;
+    stakeEntryIds: PublicKey[];
     lastStaker?: PublicKey;
     payer?: PublicKey;
     skipRewardMintTokenAccount?: boolean;
   }
-): Promise<Transaction> => {
-  const transaction = new Transaction();
-  await withUpdateTotalStakeSeconds(transaction, connection, wallet, {
-    stakeEntryId: params.stakeEntryId,
-    lastStaker: wallet.publicKey,
-  });
+): Promise<Transaction[]> => {
+  /////// derive ids ///////
+  const rewardDistributorId = findRewardDistributorId(params.stakePoolId);
+  const rewardEntryIds = params.stakeEntryIds.map((stakeEntryId) =>
+    findRewardEntryId(rewardDistributorId, stakeEntryId)
+  );
 
-  await withClaimRewards(transaction, connection, wallet, {
-    stakePoolId: params.stakePoolId,
-    stakeEntryId: params.stakeEntryId,
-    lastStaker: params.lastStaker ?? wallet.publicKey,
-    payer: params.payer,
-    skipRewardMintTokenAccount: params.skipRewardMintTokenAccount,
-  });
+  /////// get accounts ///////
+  const rewardDistributorData = await tryNull(() =>
+    getRewardDistributor(connection, rewardDistributorId)
+  );
+  if (!rewardDistributorData) throw "No reward distributor found";
+  const rewardEntryInfos = await getBatchedMultipleAccounts(
+    connection,
+    rewardEntryIds
+  );
 
-  return transaction;
+  const rewardMintTokenAccountId = getAssociatedTokenAddressSync(
+    rewardDistributorData.parsed.rewardMint,
+    params.lastStaker ?? wallet.publicKey,
+    true
+  );
+  const txs: Transaction[] = [];
+  for (let i = 0; i < params.stakeEntryIds.length; i++) {
+    const stakeEntryId = params.stakeEntryIds[i]!;
+    const rewardEntryId = rewardEntryIds[i];
+    const tx = new Transaction();
+    /////// update seconds ///////
+    await withUpdateTotalStakeSeconds(tx, connection, wallet, {
+      stakeEntryId,
+      lastStaker: wallet.publicKey,
+    });
+    /////// init ata ///////
+    if (i === 0) {
+      tx.add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey,
+          rewardMintTokenAccountId,
+          params.lastStaker ?? wallet.publicKey,
+          rewardDistributorData.parsed.rewardMint
+        )
+      );
+    }
+    /////// init entry ///////
+    if (!rewardEntryInfos[i]?.data) {
+      const ix = await rewardDistributorProgram(connection, wallet)
+        .methods.initRewardEntry()
+        .accounts({
+          rewardEntry: rewardEntryId,
+          stakeEntry: stakeEntryId,
+          rewardDistributor: rewardDistributorData.pubkey,
+          payer: wallet.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .instruction();
+      tx.add(ix);
+    }
+    /////// claim rewards ///////
+    const ix = await rewardDistributorProgram(connection, wallet)
+      .methods.claimRewards()
+      .accounts({
+        rewardEntry: rewardEntryId,
+        rewardDistributor: rewardDistributorData.pubkey,
+        stakeEntry: stakeEntryId,
+        stakePool: params.stakePoolId,
+        rewardMint: rewardDistributorData.parsed.rewardMint,
+        userRewardMintTokenAccount: rewardMintTokenAccountId,
+        rewardManager: REWARD_MANAGER,
+        user: params.payer ?? wallet.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts([
+        {
+          pubkey: getAssociatedTokenAddressSync(
+            rewardDistributorData.parsed.rewardMint,
+            rewardDistributorData.pubkey,
+            true
+          ),
+          isSigner: false,
+          isWritable: true,
+        },
+      ])
+      .instruction();
+    tx.add(ix);
+    txs.push(tx);
+  }
+  return txs;
 };
 
 /**
