@@ -381,7 +381,6 @@ export const claimRewards = async (
     stakeEntryIds: PublicKey[];
     lastStaker?: PublicKey;
     payer?: PublicKey;
-    skipRewardMintTokenAccount?: boolean;
   }
 ): Promise<Transaction[]> => {
   /////// derive ids ///////
@@ -479,6 +478,7 @@ export const stake = async (
     originalMintId: PublicKey;
     userOriginalMintTokenAccountId: PublicKey;
     amount?: BN;
+    fungible?: boolean;
     receiptType?: ReceiptType;
   }
 ): Promise<Transaction> => {
@@ -489,6 +489,8 @@ export const stake = async (
         mintId: params.originalMintId,
         tokenAccountId: params.userOriginalMintTokenAccountId,
         receiptType: params.receiptType,
+        fungible:
+          params.fungible ?? (params.amount && params.amount.gt(new BN(0))),
         amount: params.amount,
       },
     ],
@@ -519,6 +521,7 @@ export const stakeAll = async (
     mintInfos: {
       mintId: PublicKey;
       tokenAccountId: PublicKey;
+      fungible?: boolean;
       amount?: BN;
       receiptType?: ReceiptType;
     }[];
@@ -528,42 +531,48 @@ export const stakeAll = async (
   const mintMetadataIds = params.mintInfos.map(({ mintId }) =>
     findMintMetadataId(mintId)
   );
+  const stakeEntryIds = params.mintInfos.map(({ mintId, fungible }) =>
+    findStakeEntryId(
+      wallet.publicKey,
+      params.stakePoolId,
+      mintId,
+      fungible ?? false
+    )
+  );
   /////// get accounts ///////
   const accountData = await fetchAccountDataById(connection, [
-    ...params.mintInfos.map(({ mintId }) => mintId),
+    ...stakeEntryIds,
     ...mintMetadataIds,
   ]);
 
   const txs: Transaction[] = [];
-
-  for (const {
-    mintId: originalMintId,
-    tokenAccountId: userOriginalMintTokenAccountId,
-    amount,
-    receiptType,
-  } of params.mintInfos) {
+  for (let i = 0; i < params.mintInfos.length; i++) {
+    const {
+      mintId: originalMintId,
+      tokenAccountId: userOriginalMintTokenAccountId,
+      amount,
+      receiptType,
+    } = params.mintInfos[i]!;
     const mintMetadataId = findMintMetadataId(originalMintId);
     /////// deserialize accounts ///////
-    const mintAccountInfo = accountData[originalMintId.toString()] ?? null;
     const metadataAccountInfo = accountData[mintMetadataId.toString()] ?? null;
     const mintMetadata = metadataAccountInfo
       ? Metadata.deserialize(metadataAccountInfo.data)[0]
       : null;
-    const stakeEntryId = findStakeEntryId(
-      wallet.publicKey,
-      params.stakePoolId,
-      originalMintId,
-      Number(unpackMint(originalMintId, mintAccountInfo).supply.toString()) > 1
-    );
-    const stakeEntryData = await tryNull(() =>
-      getStakeEntry(connection, stakeEntryId)
-    );
-
+    const stakeEntryId = stakeEntryIds[i]!;
+    const stakeEntryInfo = accountData[stakeEntryId.toString()] ?? null;
+    const stakeEntryData = stakeEntryInfo
+      ? tryDecodeIdlAccount<"stakeEntry", CardinalStakePool>(
+          stakeEntryInfo,
+          "stakeEntry",
+          STAKE_POOL_IDL
+        )
+      : null;
     /////// start transaction ///////
     const transaction = new Transaction();
 
     /////// init entry ///////
-    if (!stakeEntryData) {
+    if (!stakeEntryInfo) {
       const ix = await stakePoolProgram(connection, wallet)
         .methods.initEntry(wallet.publicKey)
         .accounts({
@@ -641,14 +650,14 @@ export const stakeAll = async (
       if (receiptType && receiptType !== ReceiptType.None) {
         const receiptMintId =
           receiptType === ReceiptType.Receipt
-            ? stakeEntryData?.parsed.stakeMint
+            ? stakeEntryData?.parsed?.stakeMint
             : originalMintId;
         if (!receiptMintId) {
           throw "Stake entry has no stake mint. Initialize stake mint first.";
         }
         if (
-          stakeEntryData?.parsed.stakeMintClaimed ||
-          stakeEntryData?.parsed.originalMintClaimed
+          stakeEntryData?.parsed?.stakeMintClaimed ||
+          stakeEntryData?.parsed?.originalMintClaimed
         ) {
           throw "Receipt has already been claimed.";
         }
@@ -722,7 +731,7 @@ export const unstake = async (
 ): Promise<Transaction> => {
   const txs = await unstakeAll(connection, wallet, {
     stakePoolId: params.stakePoolId,
-    mintIds: [params.originalMintId],
+    mintInfos: [{ mintId: params.originalMintId }],
   });
   const tx = txs[0];
   if (!tx) throw "Failed to unstake";
@@ -742,11 +751,11 @@ export const unstakeAll = async (
   wallet: Wallet,
   params: {
     stakePoolId: PublicKey;
-    mintIds: PublicKey[];
+    mintInfos: { mintId: PublicKey }[];
   }
 ): Promise<Transaction[]> => {
   /////// derive ids ///////
-  const mintMetadataIds = params.mintIds.map((mintId) =>
+  const mintMetadataIds = params.mintInfos.map(({ mintId }) =>
     findMintMetadataId(mintId)
   );
   const rewardDistributorId = findRewardDistributorId(params.stakePoolId);
@@ -756,7 +765,7 @@ export const unstakeAll = async (
     rewardDistributorId,
     params.stakePoolId,
     ...mintMetadataIds,
-    ...params.mintIds,
+    ...params.mintInfos.map(({ mintId }) => mintId),
   ]);
 
   const rewardDistributorInfo = accountData[rewardDistributorId.toString()];
@@ -769,7 +778,7 @@ export const unstakeAll = async (
     : null;
 
   const txs: Transaction[] = [];
-  for (const originalMintId of params.mintIds) {
+  for (const { mintId: originalMintId } of params.mintInfos) {
     /////// deserialize accounts ///////
     const mintInfo = unpackMint(
       originalMintId,
