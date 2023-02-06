@@ -210,22 +210,6 @@ describe("Stake unstake", () => {
       stakePoolId: stakePoolId,
       stakeEntryIds,
     });
-    // const txSequence = !useRewardTokenAccountBefore
-    //   ? [
-    //       txs.slice(0, 1).map((tx) => {
-    //         tx.add(
-    //           createAssociatedTokenAccountIdempotentInstruction(
-    //             provider.wallet.publicKey,
-    //             userRewardTokenAccountId,
-    //             provider.wallet.publicKey,
-    //             rewardMintId
-    //           )
-    //         );
-    //         return { tx };
-    //       }),
-    //       txs.slice(1).map((tx) => ({ tx })),
-    //     ]
-    //   : [txs.map((tx) => ({ tx }))];
     await executeTransactionSequence(provider.connection, txs, provider.wallet);
 
     for (const originalMintId of originalMintIds) {
@@ -278,22 +262,6 @@ describe("Stake unstake", () => {
       stakePoolId: stakePoolId,
       mintInfos: originalMintIds.map((mintId) => ({ mintId })),
     });
-    // const txSequence = !useRewardTokenAccountBefore
-    //   ? [
-    //       txs.slice(0, 1).map((tx) => {
-    //         tx.add(
-    //           createAssociatedTokenAccountIdempotentInstruction(
-    //             provider.wallet.publicKey,
-    //             userRewardTokenAccountId,
-    //             provider.wallet.publicKey,
-    //             rewardMintId
-    //           )
-    //         );
-    //         return { tx };
-    //       }),
-    //       txs.slice(1).map((tx) => ({ tx })),
-    //     ]
-    //   : [txs.map((tx) => ({ tx }))];
     await executeTransactionSequence(provider.connection, txs, provider.wallet);
     for (const originalMintId of originalMintIds) {
       const stakeEntryData = await getStakeEntry(

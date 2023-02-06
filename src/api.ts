@@ -29,6 +29,7 @@ import {
 } from "@metaplex-foundation/mpl-token-metadata";
 import { BN } from "@project-serum/anchor";
 import type { Wallet } from "@project-serum/anchor/dist/cjs/provider";
+import type { Account } from "@solana/spl-token";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
@@ -894,32 +895,10 @@ export const unstakeAll = async (
         REWARD_DISTRIBUTOR_IDL
       )
     : null;
-
-  /////// preTxs ///////
   const rewardMintId = rewardDistributorData?.parsed?.rewardMint;
   const userRewardTokenAccountId = rewardMintId
     ? getAssociatedTokenAddressSync(rewardMintId, wallet.publicKey, true)
     : null;
-  const preTxs: { tx: Transaction }[] = [];
-  if (userRewardTokenAccountId && rewardMintId) {
-    const rewardTokenAccount = await tryNull(
-      getAccount(connection, userRewardTokenAccountId)
-    );
-    if (rewardTokenAccount) {
-      const tx = new Transaction();
-      tx.add(
-        createAssociatedTokenAccountIdempotentInstruction(
-          wallet.publicKey,
-          userRewardTokenAccountId,
-          wallet.publicKey,
-          rewardMintId
-        )
-      );
-      preTxs.push({
-        tx,
-      });
-    }
-  }
 
   const txs: { tx: Transaction }[] = [];
   for (const { mintId: originalMintId } of params.mintInfos) {
@@ -1155,7 +1134,30 @@ export const unstakeAll = async (
     }
     txs.push({ tx });
   }
-  return preTxs.length > 0 ? [preTxs, txs] : [txs];
+
+  /////// preTxs ///////
+  let rewardTokenAccount: Account | null = null;
+  if (userRewardTokenAccountId && rewardMintId) {
+    rewardTokenAccount = await tryNull(
+      getAccount(connection, userRewardTokenAccountId)
+    );
+  }
+  return !rewardTokenAccount && userRewardTokenAccountId && rewardMintId
+    ? [
+        txs.slice(0, 1).map(({ tx }) => {
+          tx.add(
+            createAssociatedTokenAccountIdempotentInstruction(
+              wallet.publicKey,
+              userRewardTokenAccountId,
+              wallet.publicKey,
+              rewardMintId
+            )
+          );
+          return { tx };
+        }),
+        txs.slice(1).map(({ tx }) => ({ tx })),
+      ]
+    : [txs.map(({ tx }) => ({ tx }))];
 };
 
 /**
