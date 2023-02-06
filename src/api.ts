@@ -3,6 +3,7 @@ import {
   fetchAccountDataById,
   findMintEditionId,
   findMintMetadataId,
+  findTokenRecordId,
   getBatchedMultipleAccounts,
   METADATA_PROGRAM_ID,
   tryDecodeIdlAccount,
@@ -106,7 +107,6 @@ import {
   remainingAccountsForInitStakeEntry,
   shouldReturnReceipt,
 } from "./programs/stakePool/utils";
-import { findTokenRecordId } from "./utils";
 
 /**
  * Convenience call to create a stake pool
