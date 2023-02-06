@@ -1,9 +1,12 @@
 import type { AccountData } from "@cardinal/common";
-import { findAta } from "@cardinal/common";
 import type { web3 } from "@project-serum/anchor";
 import { BN } from "@project-serum/anchor";
 import type { Wallet } from "@project-serum/anchor/dist/cjs/provider";
-import { getAccount, getMint } from "@solana/spl-token";
+import {
+  getAccount,
+  getAssociatedTokenAddressSync,
+  getMint,
+} from "@solana/spl-token";
 import type {
   ConfirmOptions,
   Connection,
@@ -99,7 +102,7 @@ export const getPendingRewardsForPool = async (
   };
   claimableRewards: BN;
 }> => {
-  const rewardDistributorTokenAccount = await findAta(
+  const rewardDistributorTokenAccount = getAssociatedTokenAddressSync(
     rewardDistributor.parsed.rewardMint,
     rewardDistributor.pubkey,
     true
