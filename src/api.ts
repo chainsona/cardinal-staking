@@ -1,5 +1,6 @@
 import {
   decodeIdlAccount,
+  fetchAccountDataById,
   findMintEditionId,
   findMintMetadataId,
   getBatchedMultipleAccounts,
@@ -676,14 +677,6 @@ export const stake = async (
   return transaction;
 };
 
-/**
- * Convenience method to unstake tokens
- * @param connection - Connection to use
- * @param wallet - Wallet to use
- * @param stakePoolId - Stake pool ID
- * @param originalMintId - Original mint ID
- * @returns
- */
 export const unstake = async (
   connection: Connection,
   wallet: Wallet,
@@ -692,32 +685,46 @@ export const unstake = async (
     originalMintId: PublicKey;
   }
 ): Promise<Transaction> => {
+  const txs = await unstakeAll(connection, wallet, {
+    stakePoolId: params.stakePoolId,
+    mintIds: [params.originalMintId],
+  });
+  const tx = txs[0];
+  if (!tx) throw "Failed to unstake";
+  return tx;
+};
+
+/**
+ * Convenience method to unstake tokens
+ * @param connection - Connection to use
+ * @param wallet - Wallet to use
+ * @param stakePoolId - Stake pool ID
+ * @param originalMintId - Original mint ID
+ * @returns
+ */
+export const unstakeAll = async (
+  connection: Connection,
+  wallet: Wallet,
+  params: {
+    stakePoolId: PublicKey;
+    mintIds: PublicKey[];
+  }
+): Promise<Transaction[]> => {
   /////// derive ids ///////
-  const mintMetadataId = findMintMetadataId(params.originalMintId);
-  const rewardDistributorId = findRewardDistributorId(params.stakePoolId);
-  const userOriginalMintTokenAccountId = getAssociatedTokenAddressSync(
-    params.originalMintId,
-    wallet.publicKey
+  const mintMetadataIds = params.mintIds.map((mintId) =>
+    findMintMetadataId(mintId)
   );
+  const rewardDistributorId = findRewardDistributorId(params.stakePoolId);
 
   /////// get accounts ///////
-  const [
-    mintAccountInfo,
-    metadataAccountInfo,
-    rewardDistributorInfo,
-    stakePoolInfo,
-  ] = await connection.getMultipleAccountsInfo([
-    params.originalMintId,
-    mintMetadataId,
-    findRewardDistributorId(params.stakePoolId),
+  const accountData = await fetchAccountDataById(connection, [
+    rewardDistributorId,
     params.stakePoolId,
+    ...mintMetadataIds,
+    ...params.mintIds,
   ]);
 
-  /////// deserialize accounts ///////
-  const mintInfo = unpackMint(params.originalMintId, mintAccountInfo ?? null);
-  const mintMetadata = metadataAccountInfo
-    ? Metadata.fromAccountInfo(metadataAccountInfo)[0]
-    : null;
+  const rewardDistributorInfo = accountData[rewardDistributorId.toString()];
   const rewardDistributorData = rewardDistributorInfo
     ? tryDecodeIdlAccount<"rewardDistributor", CardinalRewardDistributor>(
         rewardDistributorInfo,
@@ -725,226 +732,246 @@ export const unstake = async (
         REWARD_DISTRIBUTOR_IDL
       )
     : null;
-  if (!stakePoolInfo?.data) throw "Stake pool not found";
-  const stakePoolData = decodeIdlAccount<"stakePool", CardinalStakePool>(
-    stakePoolInfo,
-    "stakePool",
-    STAKE_POOL_IDL
-  );
-  const stakeEntryId = findStakeEntryId(
-    wallet.publicKey,
-    params.stakePoolId,
-    params.originalMintId,
-    Number(mintInfo.supply.toString()) > 1
-  );
 
-  /////// start transaction ///////
-  const transaction = new Transaction();
-
-  /////// init user token account ///////
-  transaction.add(
-    createAssociatedTokenAccountIdempotentInstruction(
-      wallet.publicKey,
-      userOriginalMintTokenAccountId,
-      wallet.publicKey,
-      params.originalMintId
-    )
-  );
-
-  if (rewardDistributorData?.parsed) {
-    /////// update total stake seconds ///////
-    const updateIx = await stakePoolProgram(connection, wallet)
-      .methods.updateTotalStakeSeconds()
-      .accountsStrict({
-        stakeEntry: stakeEntryId,
-        lastStaker: wallet.publicKey,
-      })
-      .instruction();
-    transaction.add(updateIx);
-
-    /////// claim rewards ///////
-    const rewardEntryId = findRewardEntryId(rewardDistributorId, stakeEntryId);
-    const rewardEntry = await tryGetAccount(() =>
-      getRewardEntry(connection, rewardEntryId)
+  const txs: Transaction[] = [];
+  for (const originalMintId of params.mintIds) {
+    /////// deserialize accounts ///////
+    const mintInfo = unpackMint(
+      originalMintId,
+      accountData[originalMintId.toString()] ?? null
     );
-    const userRewardMintTokenAccount = getAssociatedTokenAddressSync(
-      rewardDistributorData.parsed.rewardMint,
-      wallet.publicKey,
-      true
+    const mintMetadataId = findMintMetadataId(originalMintId);
+    const metadataAccountInfo = accountData[mintMetadataId.toString()];
+    const mintMetadata = metadataAccountInfo
+      ? Metadata.deserialize(metadataAccountInfo.data)[0]
+      : null;
+    const stakePoolInfo = accountData[params.stakePoolId.toString()];
+    if (!stakePoolInfo?.data) throw "Stake pool not found";
+    const stakePoolData = decodeIdlAccount<"stakePool", CardinalStakePool>(
+      stakePoolInfo,
+      "stakePool",
+      STAKE_POOL_IDL
     );
-    if (!rewardEntry) {
-      const ix = await rewardDistributorProgram(connection, wallet)
-        .methods.initRewardEntry()
+    const stakeEntryId = findStakeEntryId(
+      wallet.publicKey,
+      params.stakePoolId,
+      originalMintId,
+      Number(mintInfo.supply.toString()) > 1
+    );
+
+    /////// start transaction ///////
+    const tx = new Transaction();
+
+    /////// init user token account ///////
+    const userOriginalMintTokenAccountId = getAssociatedTokenAddressSync(
+      originalMintId,
+      wallet.publicKey
+    );
+    tx.add(
+      createAssociatedTokenAccountIdempotentInstruction(
+        wallet.publicKey,
+        userOriginalMintTokenAccountId,
+        wallet.publicKey,
+        originalMintId
+      )
+    );
+
+    if (rewardDistributorData?.parsed) {
+      /////// update total stake seconds ///////
+      const updateIx = await stakePoolProgram(connection, wallet)
+        .methods.updateTotalStakeSeconds()
         .accountsStrict({
-          rewardEntry: findRewardEntryId(rewardDistributorId, stakeEntryId),
-          rewardDistributor: rewardDistributorId,
           stakeEntry: stakeEntryId,
-          payer: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
+          lastStaker: wallet.publicKey,
         })
         .instruction();
-      transaction.add(ix);
-    }
-    const ix = await rewardDistributorProgram(connection, wallet)
-      .methods.claimRewards()
-      .accountsStrict({
-        rewardEntry: rewardEntryId,
-        rewardDistributor: rewardDistributorId,
-        stakeEntry: stakeEntryId,
-        stakePool: params.stakePoolId,
-        rewardMint: rewardDistributorData.parsed.rewardMint,
-        userRewardMintTokenAccount: userRewardMintTokenAccount,
-        rewardManager: REWARD_MANAGER,
-        user: wallet.publicKey,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
-      .remainingAccounts([
-        {
-          pubkey: getAssociatedTokenAddressSync(
-            rewardDistributorData.parsed.rewardMint,
-            rewardDistributorId,
-            true
-          ),
-          isSigner: false,
-          isWritable: true,
-        },
-      ])
-      .instruction();
-    transaction.add(ix);
-  }
-  if (
-    mintMetadata?.tokenStandard === TokenStandard.ProgrammableNonFungible &&
-    mintMetadata.programmableConfig?.ruleSet
-  ) {
-    /////// programmable ///////
-    const ix = await stakePoolProgram(connection, wallet)
-      .methods.unstakeProgrammable()
-      .accountsStrict({
-        stakeEntry: stakeEntryId,
-        stakePool: params.stakePoolId,
-        originalMint: params.originalMintId,
-        systemProgram: SystemProgram.programId,
-        user: wallet.publicKey,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        tokenMetadataProgram: METADATA_PROGRAM_ID,
-        userOriginalMintTokenAccount: userOriginalMintTokenAccountId,
-        userOriginalMintTokenRecord: findTokenRecordId(
-          params.originalMintId,
-          userOriginalMintTokenAccountId
-        ),
-        mintMetadata: mintMetadataId,
-        mintEdition: findMintEditionId(params.originalMintId),
-        authorizationRules: mintMetadata.programmableConfig?.ruleSet,
-        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
-        authorizationRulesProgram: TOKEN_AUTH_RULES_ID,
-      })
-      .instruction();
-    transaction.add(ix);
-  } else {
-    /////// non-programmable ///////
-    const stakeEntry = await getStakeEntry(connection, stakeEntryId);
+      tx.add(updateIx);
 
-    if (
-      stakeEntry.parsed.stakeMintClaimed ||
-      stakeEntry.parsed.originalMintClaimed
-    ) {
-      /////// receipts ///////
-      const receiptMint =
-        stakeEntry.parsed.stakeMint && stakeEntry.parsed.stakeMintClaimed
-          ? stakeEntry.parsed.stakeMint
-          : stakeEntry.parsed.originalMint;
-
-      const tokenManagerId = findTokenManagerAddress(receiptMint);
-      const tokenManagerData = await tryNull(() =>
-        tokenManager.accounts.getTokenManager(connection, tokenManagerId)
+      /////// claim rewards ///////
+      const rewardEntryId = findRewardEntryId(
+        rewardDistributorId,
+        stakeEntryId
       );
+      const rewardEntry = await tryGetAccount(() =>
+        getRewardEntry(connection, rewardEntryId)
+      );
+      const userRewardMintTokenAccount = getAssociatedTokenAddressSync(
+        rewardDistributorData.parsed.rewardMint,
+        wallet.publicKey,
+        true
+      );
+      if (!rewardEntry) {
+        const ix = await rewardDistributorProgram(connection, wallet)
+          .methods.initRewardEntry()
+          .accountsStrict({
+            rewardEntry: findRewardEntryId(rewardDistributorId, stakeEntryId),
+            rewardDistributor: rewardDistributorId,
+            stakeEntry: stakeEntryId,
+            payer: wallet.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        tx.add(ix);
+      }
+      const ix = await rewardDistributorProgram(connection, wallet)
+        .methods.claimRewards()
+        .accountsStrict({
+          rewardEntry: rewardEntryId,
+          rewardDistributor: rewardDistributorId,
+          stakeEntry: stakeEntryId,
+          stakePool: params.stakePoolId,
+          rewardMint: rewardDistributorData.parsed.rewardMint,
+          userRewardMintTokenAccount: userRewardMintTokenAccount,
+          rewardManager: REWARD_MANAGER,
+          user: wallet.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          {
+            pubkey: getAssociatedTokenAddressSync(
+              rewardDistributorData.parsed.rewardMint,
+              rewardDistributorId,
+              true
+            ),
+            isSigner: false,
+            isWritable: true,
+          },
+        ])
+        .instruction();
+      tx.add(ix);
+    }
+    if (
+      mintMetadata?.tokenStandard === TokenStandard.ProgrammableNonFungible &&
+      mintMetadata.programmableConfig?.ruleSet
+    ) {
+      /////// programmable ///////
+      const ix = await stakePoolProgram(connection, wallet)
+        .methods.unstakeProgrammable()
+        .accountsStrict({
+          stakeEntry: stakeEntryId,
+          stakePool: params.stakePoolId,
+          originalMint: originalMintId,
+          systemProgram: SystemProgram.programId,
+          user: wallet.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          tokenMetadataProgram: METADATA_PROGRAM_ID,
+          userOriginalMintTokenAccount: userOriginalMintTokenAccountId,
+          userOriginalMintTokenRecord: findTokenRecordId(
+            originalMintId,
+            userOriginalMintTokenAccountId
+          ),
+          mintMetadata: mintMetadataId,
+          mintEdition: findMintEditionId(originalMintId),
+          authorizationRules: mintMetadata.programmableConfig?.ruleSet,
+          sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+          authorizationRulesProgram: TOKEN_AUTH_RULES_ID,
+        })
+        .instruction();
+      tx.add(ix);
+    } else {
+      /////// non-programmable ///////
+      const stakeEntry = await getStakeEntry(connection, stakeEntryId);
 
       if (
-        tokenManagerData &&
-        shouldReturnReceipt(stakePoolData.parsed, stakeEntry.parsed)
+        stakeEntry.parsed.stakeMintClaimed ||
+        stakeEntry.parsed.originalMintClaimed
       ) {
-        const ix = await stakePoolProgram(connection, wallet)
-          .methods.returnReceiptMint()
-          .accountsStrict({
-            stakeEntry: stakeEntryId,
-            receiptMint: receiptMint,
-            tokenManager: tokenManagerData.pubkey,
-            tokenManagerTokenAccount: getAssociatedTokenAddressSync(
-              receiptMint,
-              tokenManagerId,
-              true
-            ),
-            userReceiptMintTokenAccount: getAssociatedTokenAddressSync(
-              receiptMint,
-              wallet.publicKey,
-              true
-            ),
-            user: wallet.publicKey,
-            collector: CRANK_KEY,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            tokenManagerProgram: TOKEN_MANAGER_ADDRESS,
-            rent: SYSVAR_RENT_PUBKEY,
-          })
-          .remainingAccounts([
-            ...(tokenManagerData.parsed.state === TokenManagerState.Claimed
-              ? getRemainingAccountsForKind(
-                  receiptMint,
-                  tokenManagerData.parsed.kind
-                )
-              : []),
-            // assume stake entry receipt mint account is already created
-            {
-              pubkey: getAssociatedTokenAddressSync(
+        /////// receipts ///////
+        const receiptMint =
+          stakeEntry.parsed.stakeMint && stakeEntry.parsed.stakeMintClaimed
+            ? stakeEntry.parsed.stakeMint
+            : stakeEntry.parsed.originalMint;
+
+        const tokenManagerId = findTokenManagerAddress(receiptMint);
+        const tokenManagerData = await tryNull(() =>
+          tokenManager.accounts.getTokenManager(connection, tokenManagerId)
+        );
+
+        if (
+          tokenManagerData &&
+          shouldReturnReceipt(stakePoolData.parsed, stakeEntry.parsed)
+        ) {
+          const ix = await stakePoolProgram(connection, wallet)
+            .methods.returnReceiptMint()
+            .accountsStrict({
+              stakeEntry: stakeEntryId,
+              receiptMint: receiptMint,
+              tokenManager: tokenManagerData.pubkey,
+              tokenManagerTokenAccount: getAssociatedTokenAddressSync(
                 receiptMint,
-                stakeEntryId,
+                tokenManagerId,
                 true
               ),
-              isSigner: false,
-              isWritable: true,
-            },
-          ])
-          .instruction();
-        transaction.add(ix);
-      }
-    }
-    const stakeEntryOriginalMintTokenAccountId = getAssociatedTokenAddressSync(
-      params.originalMintId,
-      stakeEntryId,
-      true
-    );
-    const program = stakePoolProgram(connection, wallet);
-    const ix = await program.methods
-      .unstake()
-      .accountsStrict({
-        stakePool: params.stakePoolId,
-        stakeEntry: stakeEntryId,
-        originalMint: params.originalMintId,
-        stakeEntryOriginalMintTokenAccount:
-          stakeEntryOriginalMintTokenAccountId,
-        user: wallet.publicKey,
-        userOriginalMintTokenAccount: userOriginalMintTokenAccountId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .remainingAccounts(
-        stakeEntry.parsed.stakeMint
-          ? [
+              userReceiptMintTokenAccount: getAssociatedTokenAddressSync(
+                receiptMint,
+                wallet.publicKey,
+                true
+              ),
+              user: wallet.publicKey,
+              collector: CRANK_KEY,
+              tokenProgram: TOKEN_PROGRAM_ID,
+              tokenManagerProgram: TOKEN_MANAGER_ADDRESS,
+              rent: SYSVAR_RENT_PUBKEY,
+            })
+            .remainingAccounts([
+              ...(tokenManagerData.parsed.state === TokenManagerState.Claimed
+                ? getRemainingAccountsForKind(
+                    receiptMint,
+                    tokenManagerData.parsed.kind
+                  )
+                : []),
+              // assume stake entry receipt mint account is already created
               {
                 pubkey: getAssociatedTokenAddressSync(
-                  stakeEntry.parsed.stakeMint,
+                  receiptMint,
                   stakeEntryId,
                   true
                 ),
                 isSigner: false,
-                isWritable: false,
+                isWritable: true,
               },
-            ]
-          : []
-      )
-      .instruction();
-    transaction.add(ix);
+            ])
+            .instruction();
+          tx.add(ix);
+        }
+      }
+      const stakeEntryOriginalMintTokenAccountId =
+        getAssociatedTokenAddressSync(originalMintId, stakeEntryId, true);
+      const program = stakePoolProgram(connection, wallet);
+      const ix = await program.methods
+        .unstake()
+        .accountsStrict({
+          stakePool: params.stakePoolId,
+          stakeEntry: stakeEntryId,
+          originalMint: originalMintId,
+          stakeEntryOriginalMintTokenAccount:
+            stakeEntryOriginalMintTokenAccountId,
+          user: wallet.publicKey,
+          userOriginalMintTokenAccount: userOriginalMintTokenAccountId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts(
+          stakeEntry.parsed.stakeMint
+            ? [
+                {
+                  pubkey: getAssociatedTokenAddressSync(
+                    stakeEntry.parsed.stakeMint,
+                    stakeEntryId,
+                    true
+                  ),
+                  isSigner: false,
+                  isWritable: false,
+                },
+              ]
+            : []
+        )
+        .instruction();
+      tx.add(ix);
+    }
+    txs.push(tx);
   }
-  return transaction;
+  return txs;
 };
 
 /**
