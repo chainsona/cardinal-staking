@@ -415,16 +415,14 @@ export const claimRewards = async (
       lastStaker: wallet.publicKey,
     });
     /////// init ata ///////
-    if (i === 0) {
-      tx.add(
-        createAssociatedTokenAccountIdempotentInstruction(
-          wallet.publicKey,
-          rewardMintTokenAccountId,
-          params.lastStaker ?? wallet.publicKey,
-          rewardDistributorData.parsed.rewardMint
-        )
-      );
-    }
+    tx.add(
+      createAssociatedTokenAccountIdempotentInstruction(
+        params.payer ?? wallet.publicKey,
+        rewardMintTokenAccountId,
+        params.lastStaker ?? wallet.publicKey,
+        rewardDistributorData.parsed.rewardMint
+      )
+    );
     /////// init entry ///////
     if (!rewardEntryInfos[i]?.data) {
       const ix = await rewardDistributorProgram(connection, wallet)
@@ -433,7 +431,7 @@ export const claimRewards = async (
           rewardEntry: rewardEntryId,
           stakeEntry: stakeEntryId,
           rewardDistributor: rewardDistributorData.pubkey,
-          payer: wallet.publicKey,
+          payer: params.payer ?? wallet.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .instruction();
