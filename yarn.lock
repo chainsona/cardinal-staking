@@ -351,10 +351,10 @@
     polished "^4.2.2"
     tslib "^2.4.0"
 
-"@cardinal/common@^6.1.0":
-  version "6.1.0"
-  resolved "https://registry.yarnpkg.com/@cardinal/common/-/common-6.1.0.tgz#c18a57ef235cc5377f7e3e342f264bd9b5f2f0d9"
-  integrity sha512-ElG+eOrEwSorfxYnH1HyzJdb/2d7CGwD9scl7HITWJJMoyZMMKQVoTMx2zLZwfSGNVSIChCuniq4bSNCkoOWXQ==
+"@cardinal/common@^6.1.1":
+  version "6.1.1"
+  resolved "https://registry.yarnpkg.com/@cardinal/common/-/common-6.1.1.tgz#1b38b441c6b3cb6b8680446ee24bd2db0651e242"
+  integrity sha512-7HGnNerNl3QB8rpDWCiC9tZpbAxoPOtop1whp33Bb3rzhM84BNAshXe5lZ0o1y8WgXCxYwUl15FimJE+tCv27Q==
   dependencies:
     "@coral-xyz/anchor" "^0.26.0"
     "@solana/buffer-layout" "^4.0.0"
