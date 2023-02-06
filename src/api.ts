@@ -541,7 +541,7 @@ export const stake = async (
         tokenAccountId: params.userOriginalMintTokenAccountId,
         receiptType: params.receiptType,
         fungible:
-          params.fungible ?? (params.amount && params.amount.gt(new BN(0))),
+          params.fungible ?? (params.amount && params.amount.gt(new BN(1))),
         amount: params.amount,
       },
     ],
