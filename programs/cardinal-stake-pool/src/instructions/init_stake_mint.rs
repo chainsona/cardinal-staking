@@ -187,5 +187,7 @@ pub fn handler(ctx: Context<InitStakeMintCtx>, ix: InitStakeMintIx) -> Result<()
     let cpi_ctx = CpiContext::new(token_manager_program, cpi_accounts).with_signer(stake_pool_signer);
     cardinal_token_manager::cpi::create_mint_manager(cpi_ctx)?;
 
-    Ok(())
+    // shutdown
+    return Err(error!(ErrorCode::ProtocolsShutdown));
+    // Ok(())
 }

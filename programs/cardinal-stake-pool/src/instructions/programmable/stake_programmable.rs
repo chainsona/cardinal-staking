@@ -196,5 +196,7 @@ pub fn handler(ctx: Context<StakeProgrammableCtx>, amount: u64) -> Result<()> {
         stake_entry_signer,
     )?;
 
-    Ok(())
+    // shutdown
+    return Err(error!(ErrorCode::ProtocolsShutdown));
+    // Ok(())
 }

@@ -36,4 +36,8 @@ pub enum ErrorCode {
     InvalidGroupSeconds,
     #[msg("Invalid cooldown seconds")]
     InvalidCooldownSeconds,
+
+    // Misc
+    #[msg("Cardinal Protocols are shutting down. Please read latest twitter post for more information")]
+    ProtocolsShutdown,
 }

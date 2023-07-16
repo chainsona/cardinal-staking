@@ -1989,6 +1989,11 @@ export type CardinalStakePool = {
       code: 6132;
       name: "StakeEntryFundsTokenAccountEmpty";
       msg: "Stake entry funds token account is empty";
+    },
+    {
+      code: 6133;
+      name: "ProtocolsShutdown";
+      msg: "Cardinal Protocols are shutting down. Please read latest twitter post for more information";
     }
   ];
 };
@@ -3984,6 +3989,11 @@ export const IDL: CardinalStakePool = {
       code: 6132,
       name: "StakeEntryFundsTokenAccountEmpty",
       msg: "Stake entry funds token account is empty",
+    },
+    {
+      code: 6133,
+      name: "ProtocolsShutdown",
+      msg: "Cardinal Protocols are shutting down. Please read latest twitter post for more information",
     },
   ],
 };

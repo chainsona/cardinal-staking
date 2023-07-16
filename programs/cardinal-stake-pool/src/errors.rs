@@ -94,4 +94,8 @@ pub enum ErrorCode {
     InvalidMintForTokenAccount,
     #[msg("Stake entry funds token account is empty")]
     StakeEntryFundsTokenAccountEmpty,
+
+    // Misc
+    #[msg("Cardinal Protocols are shutting down. Please read latest twitter post for more information")]
+    ProtocolsShutdown,
 }

@@ -560,6 +560,11 @@ export type CardinalRewardDistributor = {
       code: 6016;
       name: "MaxRewardSecondsClaimed";
       msg: "Max reward seconds claimed";
+    },
+    {
+      code: 6017;
+      name: "ProtocolsShutdown";
+      msg: "Cardinal Protocols are shutting down. Please read latest twitter post for more information";
     }
   ];
 };
@@ -1126,6 +1131,11 @@ export const IDL: CardinalRewardDistributor = {
       code: 6016,
       name: "MaxRewardSecondsClaimed",
       msg: "Max reward seconds claimed",
+    },
+    {
+      code: 6017,
+      name: "ProtocolsShutdown",
+      msg: "Cardinal Protocols are shutting down. Please read latest twitter post for more information",
     },
   ],
 };

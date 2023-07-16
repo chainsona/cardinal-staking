@@ -895,6 +895,11 @@ export type CardinalGroupRewardDistributor = {
       code: 6016;
       name: "InvalidCooldownSeconds";
       msg: "Invalid cooldown seconds";
+    },
+    {
+      code: 6017;
+      name: "ProtocolsShutdown";
+      msg: "Cardinal Protocols are shutting down. Please read latest twitter post for more information";
     }
   ];
 };
@@ -1796,6 +1801,11 @@ export const IDL: CardinalGroupRewardDistributor = {
       code: 6016,
       name: "InvalidCooldownSeconds",
       msg: "Invalid cooldown seconds",
+    },
+    {
+      code: 6017,
+      name: "ProtocolsShutdown",
+      msg: "Cardinal Protocols are shutting down. Please read latest twitter post for more information",
     },
   ],
 };

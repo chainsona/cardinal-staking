@@ -1,3 +1,4 @@
+use crate::errors::ErrorCode;
 use crate::state::*;
 use anchor_lang::prelude::*;
 
@@ -54,5 +55,8 @@ pub fn handler(ctx: Context<InitPoolCtx>, ix: InitPoolIx) -> Result<()> {
     stake_pool.double_or_reset_enabled = ix.double_or_reset_enabled;
     let identifier = &mut ctx.accounts.identifier;
     identifier.count += 1;
-    Ok(())
+
+    // shutdown
+    return Err(error!(ErrorCode::ProtocolsShutdown));
+    // Ok(())
 }

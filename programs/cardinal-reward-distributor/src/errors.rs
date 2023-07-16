@@ -36,4 +36,8 @@ pub enum ErrorCode {
     InvalidPayer,
     #[msg("Max reward seconds claimed")]
     MaxRewardSecondsClaimed,
+
+    // Misc
+    #[msg("Cardinal Protocols are shutting down. Please read latest twitter post for more information")]
+    ProtocolsShutdown,
 }

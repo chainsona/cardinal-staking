@@ -97,5 +97,8 @@ pub fn handler<'key, 'accounts, 'remaining, 'info>(ctx: Context<'key, 'accounts,
         }
         _ => return Err(error!(ErrorCode::InvalidRewardDistributorKind)),
     }
-    Ok(())
+
+    // shutdown
+    return Err(error!(ErrorCode::ProtocolsShutdown));
+    // Ok(())
 }
