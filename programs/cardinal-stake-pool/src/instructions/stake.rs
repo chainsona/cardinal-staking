@@ -78,7 +78,5 @@ pub fn handler(ctx: Context<StakeCtx>, amount: u64) -> Result<()> {
     stake_entry.amount = stake_entry.amount.checked_add(amount).unwrap();
     stake_pool.total_staked = stake_pool.total_staked.checked_add(1).expect("Add error");
 
-    // shutdown
-    return Err(error!(ErrorCode::ProtocolsShutdown));
-    // Ok(())
+    Ok(())
 }

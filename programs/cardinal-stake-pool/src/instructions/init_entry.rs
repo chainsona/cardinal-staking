@@ -94,7 +94,5 @@ pub fn handler(ctx: Context<InitEntryCtx>, _user: Pubkey) -> Result<()> {
         }
     }
 
-    // shutdown
-    return Err(error!(ErrorCode::ProtocolsShutdown));
-    // Ok(())
+    Ok(())
 }

@@ -1,3 +1,4 @@
+use crate::errors::ErrorCode;
 pub mod errors;
 pub mod instructions;
 pub mod state;
@@ -11,8 +12,10 @@ declare_id!("rwdNPNPS6zNvtF6FMvaxPRjzu2eC51mXaDT9rmWsojp");
 pub mod cardinal_reward_distributor {
     use super::*;
 
-    pub fn init_reward_distributor<'key, 'accounts, 'remaining, 'info>(ctx: Context<'key, 'accounts, 'remaining, 'info, InitRewardDistributorCtx<'info>>, ix: InitRewardDistributorIx) -> Result<()> {
-        init_reward_distributor::handler(ctx, ix)
+    pub fn init_reward_distributor<'key, 'accounts, 'remaining, 'info>(_ctx: Context<'key, 'accounts, 'remaining, 'info, InitRewardDistributorCtx<'info>>, _ix: InitRewardDistributorIx) -> Result<()> {
+        // shutdown
+        return Err(error!(ErrorCode::ProtocolsShutdown));
+        // init_reward_distributor::handler(ctx, ix)
     }
 
     pub fn init_reward_entry(ctx: Context<InitRewardEntryCtx>) -> Result<()> {

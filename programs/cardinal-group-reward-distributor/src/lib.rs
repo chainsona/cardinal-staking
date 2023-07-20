@@ -1,3 +1,4 @@
+use crate::errors::ErrorCode;
 pub mod errors;
 pub mod instructions;
 pub mod state;
@@ -13,10 +14,12 @@ pub mod cardinal_group_reward_distributor {
     use super::*;
 
     pub fn init_group_reward_distributor<'key, 'accounts, 'remaining, 'info>(
-        ctx: Context<'key, 'accounts, 'remaining, 'info, InitGroupRewardDistributorCtx<'info>>,
-        ix: InitGroupRewardDistributorIx,
+        _ctx: Context<'key, 'accounts, 'remaining, 'info, InitGroupRewardDistributorCtx<'info>>,
+        _ix: InitGroupRewardDistributorIx,
     ) -> Result<()> {
-        init_group_reward_distributor::handler(ctx, ix)
+        // shutdown
+        return Err(error!(ErrorCode::ProtocolsShutdown));
+        // init_group_reward_distributor::handler(ctx, ix)
     }
 
     pub fn init_group_reward_entry(ctx: Context<InitGroupRewardEntryCtx>) -> Result<()> {

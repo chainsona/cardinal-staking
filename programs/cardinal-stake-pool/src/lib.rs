@@ -1,3 +1,4 @@
+use crate::errors::ErrorCode;
 pub mod errors;
 pub mod instructions;
 pub mod state;
@@ -17,16 +18,22 @@ pub mod cardinal_stake_pool {
         init_identifier::handler(ctx)
     }
 
-    pub fn init_pool(ctx: Context<InitPoolCtx>, ix: InitPoolIx) -> Result<()> {
-        init_pool::handler(ctx, ix)
+    pub fn init_pool(_ctx: Context<InitPoolCtx>, _ix: InitPoolIx) -> Result<()> {
+        // shutdown
+        return Err(error!(ErrorCode::ProtocolsShutdown));
+        // init_pool::handler(ctx, ix)
     }
 
-    pub fn init_entry(ctx: Context<InitEntryCtx>, user: Pubkey) -> Result<()> {
-        init_entry::handler(ctx, user)
+    pub fn init_entry(_ctx: Context<InitEntryCtx>, _user: Pubkey) -> Result<()> {
+        // shutdown
+        return Err(error!(ErrorCode::ProtocolsShutdown));
+        // init_entry::handler(ctx, user)
     }
 
-    pub fn init_stake_mint(ctx: Context<InitStakeMintCtx>, ix: InitStakeMintIx) -> Result<()> {
-        init_stake_mint::handler(ctx, ix)
+    pub fn init_stake_mint(_ctx: Context<InitStakeMintCtx>, _ix: InitStakeMintIx) -> Result<()> {
+        // shutdown
+        return Err(error!(ErrorCode::ProtocolsShutdown));
+        // init_stake_mint::handler(ctx, ix)
     }
 
     pub fn authorize_mint(ctx: Context<AuthorizeMintCtx>, mint: Pubkey) -> Result<()> {
@@ -37,8 +44,10 @@ pub mod cardinal_stake_pool {
         deauthorize_mint::handler(ctx)
     }
 
-    pub fn stake(ctx: Context<StakeCtx>, amount: u64) -> Result<()> {
-        stake::handler(ctx, amount)
+    pub fn stake(_ctx: Context<StakeCtx>, _amount: u64) -> Result<()> {
+        // shutdown
+        return Err(error!(ErrorCode::ProtocolsShutdown));
+        // stake::handler(ctx, amount)
     }
 
     pub fn claim_receipt_mint<'key, 'accounts, 'remaining, 'info>(ctx: Context<'key, 'accounts, 'remaining, 'info, ClaimReceiptMintCtx<'info>>) -> Result<()> {
@@ -98,8 +107,10 @@ pub mod cardinal_stake_pool {
     }
 
     //// programmable ////
-    pub fn stake_programmable(ctx: Context<StakeProgrammableCtx>, amount: u64) -> Result<()> {
-        programmable::stake_programmable::handler(ctx, amount)
+    pub fn stake_programmable(_ctx: Context<StakeProgrammableCtx>, _amount: u64) -> Result<()> {
+        // shutdown
+        return Err(error!(ErrorCode::ProtocolsShutdown));
+        // programmable::stake_programmable::handler(ctx, amount)
     }
 
     pub fn unstake_programmable(ctx: Context<UnstakeProgrammableCtx>) -> Result<()> {

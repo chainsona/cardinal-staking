@@ -134,7 +134,5 @@ pub fn handler<'key, 'accounts, 'remaining, 'info>(ctx: Context<'key, 'accounts,
         &ctx.accounts.system_program.to_account_info(),
     )?;
 
-    // shutdown
-    return Err(error!(ErrorCode::ProtocolsShutdown));
-    // Ok(())
+    Ok(())
 }
